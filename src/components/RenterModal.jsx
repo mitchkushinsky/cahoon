@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toISODate } from '../lib/parseCSV'
-import { calculateMilestones, amountDueByNow, parseAmountPaid, getPaymentBadge } from '../lib/paymentLogic'
+import { computePayment, milestoneStatus } from '../lib/paymentLogic'
 import AppointmentList from './AppointmentList'
 
 function fmt(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
+}
+
+const badgeClass = {
+  green:  'bg-green-100 text-green-700',
+  yellow: 'bg-yellow-100 text-yellow-700',
+  red:    'bg-red-100 text-red-700',
+  gray:   'bg-gray-100 text-gray-500',
 }
 
 export default function RenterModal({ week, appointments, commentOverride, onClose, onRefresh }) {
-  const { weekStart, renterInfo, totalRent, deposit, leaseStatus, balanceDue, paymentStatus, comment } = week
+  const { weekStart, renterInfo, totalRent, leaseStatus, comment } = week
   const { name, email, dates } = renterInfo
 
   const effectiveComment = commentOverride?.comment ?? comment
@@ -17,18 +24,20 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
   const [savingComment, setSavingComment] = useState(false)
   const [commentSaved, setCommentSaved] = useState(false)
 
-  const today = new Date()
-  const leaseStart = dates?.start || null
-  const amountPaid = parseAmountPaid(paymentStatus, totalRent)
-  const dueNow = amountDueByNow(totalRent, deposit, leaseStart, today)
-  const badge = getPaymentBadge(amountPaid, dueNow, totalRent)
-  const milestones = calculateMilestones(totalRent, deposit, leaseStart)
+  const { milestones, totalPaid, totalDueNow, totalCredit, hasMismatch, badge } = computePayment(week)
+  const balanceRemaining = Math.max(0, totalRent - totalPaid)
+  const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
+
+  const fmtDate = (d) => d
+    ? (d instanceof Date
+        ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : d)
+    : '—'
 
   const saveComment = async () => {
     setSavingComment(true)
-    const weekKey = toISODate(weekStart)
     await supabase.from('comment_overrides').upsert(
-      { week_start: weekKey, comment: commentText, updated_at: new Date().toISOString() },
+      { week_start: toISODate(weekStart), comment: commentText, updated_at: new Date().toISOString() },
       { onConflict: 'week_start' }
     )
     setSavingComment(false)
@@ -36,10 +45,6 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
     setTimeout(() => setCommentSaved(false), 2000)
     onRefresh()
   }
-
-  const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
-
-  const formatDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
 
   return (
     <div className="p-5 space-y-5 pb-8">
@@ -50,56 +55,89 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
           <a href={`mailto:${email}`} className="text-sm text-blue-600 hover:underline">{email}</a>
           {dates && (
             <p className="text-sm text-gray-500 mt-0.5">
-              {formatDate(dates.start)} – {formatDate(dates.end)}
+              {fmtDate(dates.start)} – {fmtDate(dates.end)}
             </p>
           )}
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none p-1">×</button>
       </div>
 
-      {/* Lease status */}
       {leaseStatus && (
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-          <span>📋</span> Lease: {leaseStatus}
+          📋 Lease: {leaseStatus}
         </div>
       )}
 
-      {/* Financial Summary */}
-      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700">Financial Summary</h3>
+      {/* Mismatch warning */}
+      {hasMismatch && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          <span className="text-base flex-shrink-0">⚠️</span>
+          <span>Total rent mismatch — please check the spreadsheet.</span>
+        </div>
+      )}
 
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div><span className="text-gray-400">Total Rent</span><p className="font-semibold text-gray-900">{fmt(totalRent)}</p></div>
-          <div><span className="text-gray-400">Deposit</span><p className="font-semibold text-gray-900">{fmt(deposit)}</p></div>
-          <div><span className="text-gray-400">Amount Paid</span><p className="font-semibold text-gray-900">{fmt(amountPaid)}</p></div>
-          <div><span className="text-gray-400">Due Now</span><p className={`font-semibold ${dueNow > amountPaid ? 'text-red-600' : 'text-gray-900'}`}>{fmt(dueNow)}</p></div>
-          <div><span className="text-gray-400">Balance Remaining</span><p className="font-semibold text-gray-900">{fmt(balanceDue)}</p></div>
+      {/* Milestone table */}
+      <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-gray-700">Payment Milestones</h3>
+
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-xs min-w-[440px]">
+            <thead>
+              <tr className="text-gray-400 text-left border-b border-gray-200">
+                <th className="pb-2 pr-3 font-medium">Milestone</th>
+                <th className="pb-2 pr-3 font-medium">Due</th>
+                <th className="pb-2 pr-3 font-medium text-right">Owed</th>
+                <th className="pb-2 pr-3 font-medium text-right">Paid</th>
+                <th className="pb-2 pr-2 font-medium">Method</th>
+                <th className="pb-2 font-medium text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {milestones.map((m, i) => {
+                const paid = m.actual?.amount || 0
+                return (
+                  <tr key={i} className="text-gray-700">
+                    <td className="py-2.5 pr-3 font-medium text-gray-800">{m.label}</td>
+                    <td className="py-2.5 pr-3 text-gray-500 whitespace-nowrap">{m.dueDateLabel}</td>
+                    <td className="py-2.5 pr-3 text-right font-mono">{fmt(m.amountOwed)}</td>
+                    <td className={`py-2.5 pr-3 text-right font-mono font-semibold ${paid > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                      {paid > 0 ? fmt(paid) : '—'}
+                    </td>
+                    <td className="py-2.5 pr-2 text-gray-500">{m.actual?.method || '—'}</td>
+                    <td className="py-2.5 text-center text-base">{milestoneStatus(m)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
 
-        {/* Payment milestones */}
-        <div className="border-t border-gray-200 pt-3 space-y-1.5">
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Milestones</p>
-          {milestones.map((m, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-gray-600">{m.label}{m.due ? ` — due ${m.due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ' — on signing'}</span>
-              <span className="font-medium text-gray-800">{fmt(m.amount)}</span>
-            </div>
-          ))}
+        {/* Summary row */}
+        <div className="border-t border-gray-200 pt-3 grid grid-cols-2 gap-y-1.5 text-sm">
+          <span className="text-gray-400">Total Rent</span>
+          <span className="text-right font-semibold text-gray-900">{fmt(totalRent)}</span>
+
+          <span className="text-gray-400">Total Paid</span>
+          <span className="text-right font-semibold text-green-700">{fmt(totalPaid)}</span>
+
+          <span className="text-gray-400">Balance Remaining</span>
+          <span className={`text-right font-semibold ${balanceRemaining > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+            {fmt(balanceRemaining)}
+          </span>
         </div>
 
-        {/* Badge */}
-        <div className="border-t border-gray-200 pt-3">
-          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
-            badge.color === 'green' ? 'bg-green-100 text-green-700' :
-            badge.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-            badge.color === 'red' ? 'bg-red-100 text-red-700' :
-            'bg-gray-100 text-gray-600'
-          }`}>
+        {/* Credit note */}
+        {totalCredit > 0 && (
+          <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            💡 Credit of {fmt(totalCredit)} applied from overpayment
+          </p>
+        )}
+
+        {/* Overall badge */}
+        <div className="pt-1">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${badgeClass[badge.color]}`}>
             {badge.emoji} {badge.label}
-          </div>
-          {paymentStatus && (
-            <p className="text-xs text-gray-400 mt-1.5 italic">"{paymentStatus}"</p>
-          )}
+          </span>
         </div>
       </div>
 
@@ -122,7 +160,6 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
         </button>
       </div>
 
-      {/* Appointments */}
       <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} />
     </div>
   )

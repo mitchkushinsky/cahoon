@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import WeekCard from './components/WeekCard'
 import Modal from './components/Modal'
 import RenterModal from './components/RenterModal'
+import SplitRenterModal from './components/SplitRenterModal'
 import VacantModal from './components/VacantModal'
 import OwnerUseModal from './components/OwnerUseModal'
 
@@ -68,8 +69,9 @@ export default function App() {
   const handleRefreshKeepOpen = () => refreshSupabase()
 
   const selectedOwnerUse = selected ? getOwnerUseRow(selected.weekStart) : null
-  const selectedIsOwner = selected ? (selected.isOwnerSheet || !!selectedOwnerUse) : false
-  const selectedIsRenter = selected ? !!selected.renterInfo && !selectedIsOwner : false
+  const selectedIsOwner  = selected ? (selected.isOwnerSheet || !!selectedOwnerUse) : false
+  const selectedIsSplit  = selected?.type === 'split' && !selectedIsOwner
+  const selectedIsRenter = selected?.type === 'renter' && !selectedIsOwner
 
   return (
     <div className="min-h-dvh bg-gray-50">
@@ -130,7 +132,15 @@ export default function App() {
       {selected && (
         <Modal onClose={closeModal}>
           {({ onClose }) =>
-            selectedIsRenter ? (
+            selectedIsSplit ? (
+              <SplitRenterModal
+                week={selected}
+                appointments={appointments}
+                commentOverride={getCommentOverride(selected.weekStart)}
+                onClose={onClose}
+                onRefresh={handleRefreshKeepOpen}
+              />
+            ) : selectedIsRenter ? (
               <RenterModal
                 week={selected}
                 appointments={appointments}

@@ -1,59 +1,120 @@
-// Calculate payment milestones and status for a renter week
+// Compute structured milestone data from a week object.
+// Returns everything needed for both the card badge and the detail modal.
+export function computePayment(week, today = new Date()) {
+  const {
+    totalRent = 0,
+    depositOwed = 0,
+    depositActual = null,
+    payment2Owed = 0,
+    payment2Actual = null,
+    finalOwed = 0,
+    finalActual = null,
+    renterInfo = null,
+  } = week
 
-export function calculateMilestones(totalRent, deposit, leaseStart) {
-  const remaining = totalRent - deposit
-  const half = Math.round(remaining / 2 * 100) / 100
-  const year = leaseStart ? leaseStart.getFullYear() : new Date().getFullYear()
+  const leaseStart = renterInfo?.dates?.start || null
+  const leaseYear = leaseStart ? leaseStart.getFullYear() : today.getFullYear()
 
-  const thirtyBefore = leaseStart ? new Date(leaseStart) : null
-  if (thirtyBefore) thirtyBefore.setDate(thirtyBefore.getDate() - 30)
+  // Due dates
+  const jan15 = new Date(leaseYear, 0, 15)
+  const finalDueDate = leaseStart
+    ? new Date(leaseStart.getTime() - 30 * 24 * 60 * 60 * 1000)
+    : null
 
-  return [
-    { label: 'Deposit', amount: deposit, due: null }, // due on signing
-    { label: '50% of balance', amount: half, due: new Date(year, 0, 15) }, // Jan 15
-    { label: 'Remaining balance', amount: remaining - half, due: thirtyBefore }, // 30 days before
+  // Raw paid amounts
+  const paid1 = depositActual?.amount  || 0
+  const paid2 = payment2Actual?.amount || 0
+  const paid3 = finalActual?.amount    || 0
+  const totalPaid = paid1 + paid2 + paid3
+
+  // Overpayment credit: excess from milestone 1 flows into milestone 2,
+  // then excess from milestones 1+2 flows into milestone 3
+  const credit1 = Math.max(0, paid1 - depositOwed)
+  const m2DueAdjusted = Math.max(0, payment2Owed - credit1)
+  const credit2 = Math.max(0, paid1 + paid2 - depositOwed - payment2Owed)
+  const m3DueAdjusted = Math.max(0, finalOwed - credit2)
+  const totalCredit = credit1 + credit2
+
+  // Which milestones are due as of today
+  const m1Due = true // always due on signing
+  const m2Due = today >= jan15
+  const m3Due = finalDueDate ? today >= finalDueDate : false
+
+  const milestones = [
+    {
+      label: 'Deposit',
+      dueDateLabel: 'On signing',
+      dueDate: null,
+      amountOwed: depositOwed,
+      amountDueNow: depositOwed, // always due
+      actual: depositActual,
+      isDue: m1Due,
+    },
+    {
+      label: '2nd Payment',
+      dueDateLabel: `Jan 15, ${leaseYear}`,
+      dueDate: jan15,
+      amountOwed: payment2Owed,
+      amountDueNow: m2Due ? m2DueAdjusted : 0,
+      actual: payment2Actual,
+      isDue: m2Due,
+    },
+    {
+      label: 'Final Payment',
+      dueDateLabel: finalDueDate
+        ? finalDueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : '—',
+      dueDate: finalDueDate,
+      amountOwed: finalOwed,
+      amountDueNow: m3Due ? m3DueAdjusted : 0,
+      actual: finalActual,
+      isDue: m3Due,
+    },
   ]
-}
 
-export function amountDueByNow(totalRent, deposit, leaseStart, today = new Date()) {
-  const milestones = calculateMilestones(totalRent, deposit, leaseStart)
-  // Deposit (milestone 0) always counts as past due
-  let due = milestones[0].amount
-  if (milestones[1].due && milestones[1].due <= today) due += milestones[1].amount
-  if (milestones[2].due && milestones[2].due <= today) due += milestones[2].amount
-  return Math.min(due, totalRent)
-}
+  // Total owed now
+  const totalDueNow = milestones.reduce((s, m) => s + m.amountDueNow, 0)
 
-// Parse column N free text to extract amount paid
-export function parseAmountPaid(paymentText, totalRent) {
-  if (!paymentText) return 0
-  const text = paymentText.toLowerCase()
+  // Mismatch check: col J should = col O + col Q + col S
+  const sumOwed = depositOwed + payment2Owed + finalOwed
+  const hasMismatch = totalRent > 0 && Math.abs(totalRent - sumOwed) > 0.01
 
-  if (text.includes('paid in full') || text.includes('balance paid')) return totalRent
+  // Overall badge
+  const badge = computeBadge(totalPaid, totalDueNow, totalRent, milestones, today)
 
-  // "deposit + $X"
-  const depositPlusMatch = text.match(/deposit\s*\+\s*\$?([\d,]+)/)
-  if (depositPlusMatch) return 500 + parseFloat(depositPlusMatch[1].replace(/,/g, ''))
-
-  // "$X paid" or "received $X" or "paid $X"
-  const dollarMatch = text.match(/\$?([\d,]+(?:\.\d{2})?)\s*(paid|received|deposit)/)
-    || text.match(/(paid|received)\s*\$?([\d,]+(?:\.\d{2})?)/)
-  if (dollarMatch) {
-    const raw = dollarMatch[1] || dollarMatch[2]
-    const amount = parseFloat(raw.replace(/,/g, ''))
-    if (!isNaN(amount) && amount > 0) return amount
+  return {
+    milestones,
+    totalPaid,
+    totalDueNow,
+    totalCredit,
+    hasMismatch,
+    sumOwed,
+    badge,
   }
-
-  // "deposit received" or "deposit paid" → $500
-  if (text.includes('deposit')) return 500
-
-  return 0
 }
 
-export function getPaymentBadge(amountPaid, amountDueNow, totalRent) {
-  if (amountPaid >= totalRent) return { label: 'Paid in Full', emoji: '✅', color: 'green' }
-  if (amountPaid >= amountDueNow) return { label: 'Current', emoji: '🟢', color: 'green' }
-  if (amountPaid > 0) return { label: 'Partial', emoji: '🟡', color: 'yellow' }
-  if (amountDueNow > 0) return { label: 'Overdue', emoji: '🔴', color: 'red' }
-  return { label: 'Pending', emoji: '⚪', color: 'gray' }
+function computeBadge(totalPaid, totalDueNow, totalRent, milestones, today) {
+  if (totalRent > 0 && totalPaid >= totalRent) {
+    return { emoji: '✅', label: 'Paid in Full', color: 'green' }
+  }
+  // Check if any due milestone is entirely unpaid
+  const anyOverdue = milestones.some(m => m.isDue && m.amountDueNow > 0 && (m.actual?.amount || 0) === 0)
+  if (anyOverdue) return { emoji: '🔴', label: 'Overdue', color: 'red' }
+  if (totalPaid >= totalDueNow && totalDueNow > 0) {
+    return { emoji: '🟢', label: 'Current', color: 'green' }
+  }
+  if (totalPaid > 0) return { emoji: '🟡', label: 'Partial', color: 'yellow' }
+  if (totalDueNow > 0) return { emoji: '🔴', label: 'Overdue', color: 'red' }
+  return { emoji: '⚪', label: 'Pending', color: 'gray' }
+}
+
+// Per-row milestone status emoji
+export function milestoneStatus(milestone) {
+  const paid = milestone.actual?.amount || 0
+  const owed = milestone.amountOwed
+  if (owed === 0) return '—'
+  if (paid >= owed) return '✅'
+  if (!milestone.isDue) return '⏳'
+  if (paid > 0) return '🟡'
+  return '🔴'
 }
