@@ -18,24 +18,81 @@ function inlineDates(dates) {
     : fmtDate(dates.start)
 }
 
-function RenterChip({ renter }) {
+// Compute proportional position/width for a rental within a 7-day week slot.
+// All inputs are Date objects. Returns { leftPct, widthPct }.
+function ganttMetrics(weekStart, startDate, endDate) {
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+  const weekEnd = new Date(weekStart.getTime() + WEEK_MS)
+
+  const clampedStart = new Date(Math.max(startDate.getTime(), weekStart.getTime()))
+  const clampedEnd   = new Date(Math.min(endDate.getTime(),   weekEnd.getTime()))
+
+  const leftPct  = (clampedStart.getTime() - weekStart.getTime()) / WEEK_MS * 100
+  const widthPct = (clampedEnd.getTime()   - clampedStart.getTime()) / WEEK_MS * 100
+
+  return { leftPct, widthPct }
+}
+
+// A single proportional pill. Hides name text when pill is very narrow.
+function GanttPill({ name, dates, badge, weekStart, colorClass }) {
+  const { leftPct, widthPct } = ganttMetrics(weekStart, dates.start, dates.end)
+
+  const isNarrow   = widthPct < 30
+  const isVeryNarrow = widthPct < 20
+
+  return (
+    <div className="relative w-full h-7">
+      <span
+        className={`absolute inset-y-0 flex items-center rounded-full text-xs font-semibold overflow-hidden ${colorClass}`}
+        style={{ left: `${leftPct}%`, width: `${widthPct}%`, minWidth: '1.25rem' }}
+        title={`${name}${dates ? ` · ${inlineDates(dates)}` : ''}`}
+      >
+        {isVeryNarrow ? (
+          <span className="mx-auto flex-shrink-0 leading-none">{badge?.emoji}</span>
+        ) : (
+          <span className="flex items-center gap-1 px-2 min-w-0">
+            {!isNarrow && <span className="truncate">{name}</span>}
+            {!isNarrow && dates?.start && (
+              <span className="opacity-70 whitespace-nowrap flex-shrink-0">
+                · {inlineDates(dates)}
+              </span>
+            )}
+            {isNarrow && <span className="truncate">{name}</span>}
+            <span className="flex-shrink-0 ml-auto pl-0.5">{badge?.emoji}</span>
+          </span>
+        )}
+      </span>
+    </div>
+  )
+}
+
+function RenterChip({ renter, weekStart }) {
   const { badge } = computePayment(renter)
   const dates = renter.renterInfo?.dates
-  return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700 max-w-full">
-      <span className="truncate">{renter.renterInfo.name}</span>
-      {dates?.start && (
-        <span className="text-xs font-normal opacity-70 whitespace-nowrap flex-shrink-0">
-          · {inlineDates(dates)}
+  if (!dates?.start || !dates?.end) {
+    // Fallback: full-width pill if no dates
+    return (
+      <div className="relative w-full h-7">
+        <span className="absolute inset-0 flex items-center gap-1 px-2.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+          <span className="truncate">{renter.renterInfo.name}</span>
+          <span className="flex-shrink-0 ml-auto">{badge.emoji}</span>
         </span>
-      )}
-      <span className="flex-shrink-0">{badge.emoji}</span>
-    </span>
+      </div>
+    )
+  }
+  return (
+    <GanttPill
+      name={renter.renterInfo.name}
+      dates={dates}
+      badge={badge}
+      weekStart={weekStart}
+      colorClass="bg-green-100 text-green-700"
+    />
   )
 }
 
 export default function WeekCard({ week, ownerUseRow, appointments, commentOverride, onClick }) {
-  const { weekStart, type, isOwnerSheet, comment, renterInfo, totalRent, renters } = week
+  const { weekStart, type, isOwnerSheet, comment, renterInfo, totalRent, renters, startDate, endDate } = week
   const weekKey     = toISODate(weekStart)
   const isOwner     = isOwnerSheet || !!ownerUseRow
   const resolvedType = isOwner ? 'owner' : type
@@ -72,15 +129,18 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
             </span>
           )}
 
-          {resolvedType === 'renter' && (
+          {resolvedType === 'renter' && renterInfo?.dates?.start && renterInfo?.dates?.end ? (
+            <GanttPill
+              name={renterInfo.name}
+              dates={renterInfo.dates}
+              badge={singleBadge}
+              weekStart={weekStart}
+              colorClass="bg-green-100 text-green-700"
+            />
+          ) : resolvedType === 'renter' && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700">
                 <span className="truncate max-w-[160px]">{renterInfo?.name}</span>
-                {renterInfo?.dates?.start && (
-                  <span className="text-xs font-normal opacity-70 whitespace-nowrap flex-shrink-0">
-                    · {inlineDates(renterInfo.dates)}
-                  </span>
-                )}
               </span>
               {singleBadge && (
                 <span className="text-base flex-shrink-0" title={singleBadge.label}>{singleBadge.emoji}</span>
@@ -89,8 +149,8 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
           )}
 
           {resolvedType === 'split' && renters && (
-            <div className="flex flex-col gap-1.5 mt-0.5">
-              {renters.map((r, i) => <RenterChip key={i} renter={r} />)}
+            <div className="flex flex-col gap-1 mt-0.5">
+              {renters.map((r, i) => <RenterChip key={i} renter={r} weekStart={weekStart} />)}
             </div>
           )}
         </div>
