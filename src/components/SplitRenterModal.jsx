@@ -16,7 +16,7 @@ const badgeClass = {
 }
 
 function RenterSection({ renter, index }) {
-  const { renterInfo, totalRent, leaseStatus } = renter
+  const { renterInfo, totalRent, leaseStatus, leaseUrl } = renter
   const { name, email, dates } = renterInfo
   const { milestones, totalPaid, totalCredit, hasMismatch, badge } = computePayment(renter)
   const balanceRemaining = Math.max(0, totalRent - totalPaid)
@@ -43,9 +43,20 @@ function RenterSection({ renter, index }) {
           )}
         </div>
         {leaseStatus && (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0 ml-2 mt-1">
-            📋 {leaseStatus}
-          </span>
+          leaseUrl ? (
+            <a
+              href={leaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 underline underline-offset-2 flex-shrink-0 ml-2 mt-1"
+            >
+              📄 {leaseStatus} ↗
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0 ml-2 mt-1">
+              📋 {leaseStatus}
+            </span>
+          )
         )}
       </div>
 

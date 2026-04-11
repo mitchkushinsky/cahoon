@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { parseCSV, toISODate } from './lib/parseCSV'
+import { computeReminders } from './lib/reminders'
 import { supabase } from './lib/supabase'
 import WeekCard from './components/WeekCard'
 import Modal from './components/Modal'
@@ -7,6 +8,7 @@ import RenterModal from './components/RenterModal'
 import SplitRenterModal from './components/SplitRenterModal'
 import VacantModal from './components/VacantModal'
 import OwnerUseModal from './components/OwnerUseModal'
+import ReminderBanner from './components/ReminderBanner'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -19,6 +21,10 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [dismissedReminders, setDismissedReminders] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dismissedReminders') || '[]') }
+    catch { return [] }
+  })
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -68,6 +74,32 @@ export default function App() {
   const handleRefresh = () => { refreshSupabase(); closeModal() }
   const handleRefreshKeepOpen = () => refreshSupabase()
 
+  // Compute reminders and filter out dismissed ones
+  const allReminders = weeks.length > 0 ? computeReminders(weeks) : []
+  const visibleReminders = allReminders.filter(r => {
+    const key = `${r.type}_${r.renterName}`
+    return !dismissedReminders.includes(key)
+  })
+
+  const dismissReminder = (reminder) => {
+    const key = `${reminder.type}_${reminder.renterName}`
+    const next = [...dismissedReminders, key]
+    setDismissedReminders(next)
+    try { localStorage.setItem('dismissedReminders', JSON.stringify(next)) } catch {}
+  }
+
+  // PWA badge count
+  useEffect(() => {
+    const count = visibleReminders.length
+    try {
+      if (count > 0 && 'setAppBadge' in navigator) {
+        navigator.setAppBadge(count).catch(() => {})
+      } else if (count === 0 && 'clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(() => {})
+      }
+    } catch {}
+  }, [visibleReminders.length])
+
   const selectedOwnerUse = selected ? getOwnerUseRow(selected.weekStart) : null
   const selectedIsOwner  = selected ? (selected.isOwnerSheet || !!selectedOwnerUse) : false
   const selectedIsSplit  = selected?.type === 'split' && !selectedIsOwner
@@ -109,6 +141,14 @@ export default function App() {
             <p className="font-semibold">Couldn't load schedule</p>
             <p className="mt-1 text-red-500">{error}</p>
             <button onClick={loadData} className="mt-2 font-medium text-red-600 hover:underline">Try again</button>
+          </div>
+        )}
+
+        {visibleReminders.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {visibleReminders.map((r, i) => (
+              <ReminderBanner key={i} reminder={r} onDismiss={() => dismissReminder(r)} />
+            ))}
           </div>
         )}
 

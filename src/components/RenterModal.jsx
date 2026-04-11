@@ -16,7 +16,7 @@ const badgeClass = {
 }
 
 export default function RenterModal({ week, appointments, commentOverride, onClose, onRefresh }) {
-  const { weekStart, renterInfo, totalRent, leaseStatus, comment } = week
+  const { weekStart, renterInfo, totalRent, leaseStatus, leaseUrl, comment } = week
   const { name, email, dates } = renterInfo
 
   const effectiveComment = commentOverride?.comment ?? comment
@@ -63,9 +63,20 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
       </div>
 
       {leaseStatus && (
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-          📋 Lease: {leaseStatus}
-        </div>
+        leaseUrl ? (
+          <a
+            href={leaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 underline underline-offset-2"
+          >
+            📄 Lease: {leaseStatus} ↗
+          </a>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            📋 Lease: {leaseStatus}
+          </div>
+        )
       )}
 
       {/* Mismatch warning */}

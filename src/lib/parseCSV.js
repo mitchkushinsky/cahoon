@@ -91,6 +91,7 @@ function parseRow(row) {
   const payment2Actual = parseActualPayment(row[12])
   const finalOwed      = parseAmount(row[13])
   const finalActual    = parseActualPayment(row[14])
+  const leaseUrl       = (row[15] || '').trim() || null  // col P
 
   // Backward-compat wrapper so paymentLogic and modal components can reach
   // renterInfo.name, renterInfo.email, renterInfo.dates.{start,end}
@@ -110,6 +111,7 @@ function parseRow(row) {
     totalRent,
     depositSummary,
     leaseStatus,
+    leaseUrl,
     balanceDue,
     depositOwed,
     depositActual,
