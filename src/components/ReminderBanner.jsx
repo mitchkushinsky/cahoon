@@ -1,16 +1,25 @@
-export default function ReminderBanner({ reminder, onDismiss }) {
-  // JAN_15 has multiple mailto links (one per renter)
+import { useState } from 'react'
+
+export default function ReminderBanner({ reminder, onSessionDismiss, onPermanentDismiss }) {
+  const [marking, setMarking] = useState(false)
   const isJan15 = reminder.type === 'JAN_15'
+
+  const handleMarkSent = async () => {
+    setMarking(true)
+    await onPermanentDismiss(reminder)
+    // No need to reset — banner will unmount
+  }
 
   return (
     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm">
       <span className="flex-shrink-0 text-base">⚠️</span>
+
       <div className="flex-1 min-w-0">
         <p className="text-amber-800 font-medium leading-snug">{reminder.message}</p>
 
-        {isJan15 && reminder.mailtoUrls?.length > 1 ? (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {reminder.mailtoUrls.map(({ name, url }) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+          {isJan15 && reminder.mailtoUrls?.length > 1 ? (
+            reminder.mailtoUrls.map(({ name, url }) => (
               <a
                 key={name}
                 href={url}
@@ -18,21 +27,30 @@ export default function ReminderBanner({ reminder, onDismiss }) {
               >
                 Email {name}
               </a>
-            ))}
-          </div>
-        ) : (
-          <a
-            href={reminder.mailtoUrl}
-            className="inline-block mt-1.5 text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+            ))
+          ) : (
+            <a
+              href={reminder.mailtoUrl}
+              className="text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+            >
+              Send Email
+            </a>
+          )}
+
+          <button
+            onClick={handleMarkSent}
+            disabled={marking}
+            className="text-xs font-semibold text-green-700 bg-green-100 hover:bg-green-200 px-2.5 py-1 rounded-full disabled:opacity-50 transition-colors"
           >
-            Send Email
-          </a>
-        )}
+            {marking ? 'Saving…' : 'Mark as Sent ✓'}
+          </button>
+        </div>
       </div>
+
       <button
-        onClick={onDismiss}
-        className="flex-shrink-0 text-amber-400 hover:text-amber-600 text-lg leading-none p-0.5"
-        aria-label="Dismiss"
+        onClick={() => onSessionDismiss(reminder)}
+        className="flex-shrink-0 text-amber-400 hover:text-amber-600 text-lg leading-none p-0.5 -mt-0.5"
+        aria-label="Dismiss for this session"
       >
         ×
       </button>

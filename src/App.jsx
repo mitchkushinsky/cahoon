@@ -21,16 +21,14 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
-  const [dismissedReminders, setDismissedReminders] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('dismissedReminders') || '[]') }
-    catch { return [] }
-  })
+  const [sessionDismissed, setSessionDismissed] = useState([])       // keys dismissed this session
+  const [permanentDismissals, setPermanentDismissals] = useState([])  // keys from Supabase
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [csvResp, ouResp, apptResp, coResp] = await Promise.all([
+      const [csvResp, ouResp, apptResp, coResp, rdResp] = await Promise.all([
         fetch(CSV_URL).then(r => {
           if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
           return r.text()
@@ -38,11 +36,13 @@ export default function App() {
         supabase.from('owner_use').select('*'),
         supabase.from('appointments').select('*'),
         supabase.from('comment_overrides').select('*'),
+        supabase.from('reminder_dismissals').select('reminder_key'),
       ])
       setWeeks(parseCSV(csvResp))
       setOwnerUse(ouResp.data || [])
       setAppointments(apptResp.data || [])
       setCommentOverrides(coResp.data || [])
+      setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
     } finally {
@@ -74,18 +74,24 @@ export default function App() {
   const handleRefresh = () => { refreshSupabase(); closeModal() }
   const handleRefreshKeepOpen = () => refreshSupabase()
 
-  // Compute reminders and filter out dismissed ones
+  // Compute reminders, filtering out session and permanently dismissed
   const allReminders = weeks.length > 0 ? computeReminders(weeks) : []
-  const visibleReminders = allReminders.filter(r => {
-    const key = `${r.type}_${r.renterName}`
-    return !dismissedReminders.includes(key)
-  })
+  const visibleReminders = allReminders.filter(r =>
+    !sessionDismissed.includes(r.reminderKey) &&
+    !permanentDismissals.includes(r.reminderKey)
+  )
 
-  const dismissReminder = (reminder) => {
-    const key = `${reminder.type}_${reminder.renterName}`
-    const next = [...dismissedReminders, key]
-    setDismissedReminders(next)
-    try { localStorage.setItem('dismissedReminders', JSON.stringify(next)) } catch {}
+  const sessionDismiss = (reminder) => {
+    setSessionDismissed(prev => [...prev, reminder.reminderKey])
+  }
+
+  const permanentDismiss = async (reminder) => {
+    // Optimistically hide immediately
+    setPermanentDismissals(prev => [...prev, reminder.reminderKey])
+    await supabase.from('reminder_dismissals').upsert(
+      { reminder_key: reminder.reminderKey },
+      { onConflict: 'reminder_key' }
+    )
   }
 
   // PWA badge count
@@ -147,7 +153,12 @@ export default function App() {
         {visibleReminders.length > 0 && (
           <div className="space-y-2 mb-4">
             {visibleReminders.map((r, i) => (
-              <ReminderBanner key={i} reminder={r} onDismiss={() => dismissReminder(r)} />
+              <ReminderBanner
+                key={r.reminderKey ?? i}
+                reminder={r}
+                onSessionDismiss={sessionDismiss}
+                onPermanentDismiss={permanentDismiss}
+              />
             ))}
           </div>
         )}

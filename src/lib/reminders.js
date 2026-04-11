@@ -1,6 +1,10 @@
 // Compute active reminder banners from the full list of week slots.
 // Returns an array of reminder objects sorted by urgency (daysUntil asc).
 
+// DEV ONLY — set to a date string to test reminders, e.g. '2026-04-22'
+// Set to null before deploying
+const DEV_DATE_OVERRIDE = null
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function daysUntil(targetDate, today) {
@@ -22,7 +26,17 @@ function buildMailto(to, subject, body) {
   return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
-export function computeReminders(weeks, today = new Date()) {
+function isoDate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function computeReminders(weeks) {
+  const today = DEV_DATE_OVERRIDE
+    ? new Date(DEV_DATE_OVERRIDE + 'T12:00:00')
+    : new Date()
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const reminders = []
 
@@ -75,8 +89,10 @@ export function computeReminders(weeks, today = new Date()) {
       }
     })
 
+    const jan15Year = jan15Renters[0].entry.renterInfo?.dates?.start?.getFullYear() ?? todayMidnight.getFullYear()
     reminders.push({
       type: 'JAN_15',
+      reminderKey: `JAN_15_${jan15Year}`,
       renterName: names,
       email: jan15Renters[0].entry.email,
       message: `Jan 15 payment due in ${minDays} day${minDays === 1 ? '' : 's'} for: ${names}`,
@@ -102,6 +118,7 @@ export function computeReminders(weeks, today = new Date()) {
         const body = `Hi ${name},\n\nJust a reminder that your final payment of ${fmt(finalOwed)} is due on ${fmtDate(finalDueDate)}.${methodNote}\n\nThank you!`
         reminders.push({
           type: 'FINAL_PAYMENT',
+          reminderKey: `FINAL_PAYMENT_${isoDate(leaseStart)}`,
           renterName: name,
           email,
           message: `${name}'s final payment of ${fmt(finalOwed)} is due in ${days} day${days === 1 ? '' : 's'}. Send reminder?`,
@@ -118,6 +135,7 @@ export function computeReminders(weeks, today = new Date()) {
         const body = `Hi ${name},\n\nWe're looking forward to your arrival on ${fmtDate(leaseStart)}! Please don't hesitate to reach out if you have any questions.\n\nSee you soon!`
         reminders.push({
           type: 'WELCOME',
+          reminderKey: `WELCOME_${isoDate(leaseStart)}`,
           renterName: name,
           email,
           message: `${name} arrives in ${days} day${days === 1 ? '' : 's'}. Send welcome email?`,
