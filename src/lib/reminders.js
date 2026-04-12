@@ -7,6 +7,92 @@ const DEV_DATE_OVERRIDE = null
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// ── Mail merge helpers ────────────────────────────────────────────────────────
+
+// Replace <FieldName> placeholders with values from the fields object.
+export function mergeTemplate(template, fields) {
+  return Object.entries(fields).reduce(
+    (t, [key, val]) => t.replaceAll(`<${key}>`, val ?? ''),
+    template
+  )
+}
+
+// Convert **bold** markers to <strong> tags for HTML preview.
+// Preserves all other content as-is (use with white-space: pre-wrap).
+export function renderHtml(merged) {
+  return merged.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
+
+// Strip **bold** markers for plain text (clipboard / mailto body).
+export function renderPlain(merged) {
+  return merged.replace(/\*\*/g, '')
+}
+
+// ── Email templates ───────────────────────────────────────────────────────────
+
+const JAN15_TEMPLATE = `Hi <Name>,
+
+Just a reminder that your January 15 payment of <Payment2Amount> is almost due.
+
+Please:
+
+* Venmo (@Mitchell-Kushinsky)
+* Zelle to mitch.kushinsky@gmail.com
+* USPS to:
+          215 W 91st Street
+           Apt. 23
+           New York, NY 10024
+
+Thanks,
+Mitch Kushinsky`
+
+const FINAL_PAYMENT_TEMPLATE = `Hi <Name>,
+
+It's only a month before your stay at Cahoon Drive. This is just a reminder that your final payment of <Payment3Amount> is almost due.
+
+Please:
+
+* Venmo (@Mitchell-Kushinsky)
+* Zelle to mitch.kushinsky@gmail.com
+* USPS to:
+          215 W 91st Street
+           Apt. 23
+           New York, NY 10024
+
+Thanks,
+Mitch Kushinsky`
+
+export const WELCOME_EMAIL_TEMPLATE = `Hi <Name>,
+
+I hope you'll have a great week at 1105 Cahoon Hollow Road.
+
+Here is some information that you'll need to know.
+
+**Check in is 3:00 PM or after on <LeaseStartDate>**
+**Check out is 10:00 AM on <LeaseEndDate>**
+
+If you have any problems while you are here, please call our caretaker Jose with any major issues related to the house (plumbing, electrical, appliances) at 508-383-3134. For minor issues or questions email Jose at ocean.heart.cleaning@gmail.com. He will respond in a timely manner.
+
+**Keys** - Your Key to the house will be left in a lock box which is located next to the first door by the locked basement/storage entrance. The combination is **3249**. Please return the key to the lockbox at checkout.
+
+As a new security feature this year, we have added a Smart Lock to the front door. The combination for your week is **<SmartLockCombo>**.
+
+The **WIFI** network is **1105Cahoon** and the password is **seals2023**.
+
+**Garbage:**
+Pickup is two times a week, which is Wednesday and Saturday morning. Recycling goes in the blue bin and is picked up on Monday.
+
+The renovation is now complete. The one major change this year is the replacement of the old furnace. We also have new mattresses in the Queen and Twin Bedrooms.
+
+Also, here are a few requests:
+I hope your weather is perfect, but if there is a storm, please try to secure whatever is on the deck. And remember, the new countertops should only be cleaned with soap and water. Please don't put hot pans or pots directly on them.
+
+Enjoy your vacation and please let me know if you have trouble finding anything.
+
+Mitch Kushinsky`
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
 function daysUntil(targetDate, today) {
   const diff = targetDate.getTime() - today.getTime()
   return Math.ceil(diff / DAY_MS)
@@ -22,6 +108,12 @@ function fmtDate(d) {
     : String(d)
 }
 
+function fmtLongDate(d) {
+  return d instanceof Date
+    ? d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : String(d)
+}
+
 function buildMailto(to, subject, body) {
   return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
@@ -32,6 +124,12 @@ function isoDate(date) {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+
+function firstName(fullName) {
+  return (fullName || '').split(/\s+/)[0]
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
 
 export function computeReminders(weeks) {
   const today = DEV_DATE_OVERRIDE
@@ -79,13 +177,16 @@ export function computeReminders(weeks) {
     const minDays = Math.min(...jan15Renters.map(x => x.days))
     const names = jan15Renters.map(x => x.entry.name).join(', ')
 
-    // Build per-renter mailto links
+    // Build per-renter mailto links using the template
     const mailtoUrls = jan15Renters.map(({ entry }) => {
-      const body = `Hi ${entry.name},\n\nJust a reminder that your second payment of ${fmt(entry.payment2Owed)} is due on January 15th.\n\nThank you!`
+      const body = renderPlain(mergeTemplate(JAN15_TEMPLATE, {
+        Name: firstName(entry.name),
+        Payment2Amount: fmt(entry.payment2Owed),
+      }))
       return {
         name: entry.name,
         email: entry.email,
-        url: buildMailto(entry.email, 'Cahoon - Payment Reminder', body),
+        url: buildMailto(entry.email, 'Cahoon - January 15 Payment Reminder', body),
       }
     })
 
@@ -96,7 +197,7 @@ export function computeReminders(weeks) {
       renterName: names,
       email: jan15Renters[0].entry.email,
       message: `Jan 15 payment due in ${minDays} day${minDays === 1 ? '' : 's'} for: ${names}`,
-      mailtoUrls,        // array for multi-renter
+      mailtoUrls,
       mailtoUrl: mailtoUrls[0]?.url,
       daysUntil: minDays,
     })
@@ -104,8 +205,9 @@ export function computeReminders(weeks) {
 
   // ── PER-RENTER REMINDERS ──────────────────────────────────────────────────
   for (const entry of unique) {
-    const { name, email, renterInfo, finalOwed, finalActual, payment2Owed, payment2Actual, startDate } = entry
+    const { name, email, renterInfo, finalOwed, finalActual, payment2Owed, payment2Actual, startDate, smartLockCombo } = entry
     const leaseStart = renterInfo?.dates?.start || startDate
+    const leaseEnd   = renterInfo?.dates?.end   || entry.endDate
 
     // FINAL_PAYMENT_REMINDER
     if (finalOwed > 0 && !(finalActual?.amount > 0) && leaseStart) {
@@ -113,9 +215,10 @@ export function computeReminders(weeks) {
       const days = daysUntil(finalDueDate, todayMidnight)
 
       if (days >= 0 && days <= 2) {
-        const prevMethod = payment2Actual?.method || depositActual?.method || null
-        const methodNote = prevMethod ? ` Please send via ${prevMethod}.` : ''
-        const body = `Hi ${name},\n\nJust a reminder that your final payment of ${fmt(finalOwed)} is due on ${fmtDate(finalDueDate)}.${methodNote}\n\nThank you!`
+        const body = renderPlain(mergeTemplate(FINAL_PAYMENT_TEMPLATE, {
+          Name: firstName(name),
+          Payment3Amount: fmt(finalOwed),
+        }))
         reminders.push({
           type: 'FINAL_PAYMENT',
           reminderKey: `FINAL_PAYMENT_${isoDate(leaseStart)}`,
@@ -132,14 +235,21 @@ export function computeReminders(weeks) {
     if (leaseStart) {
       const days = daysUntil(leaseStart, todayMidnight)
       if (days >= 0 && days <= 7) {
-        const body = `Hi ${name},\n\nWe're looking forward to your arrival on ${fmtDate(leaseStart)}! Please don't hesitate to reach out if you have any questions.\n\nSee you soon!`
+        const mergeFields = {
+          Name: firstName(name),
+          LeaseStartDate: fmtLongDate(leaseStart),
+          LeaseEndDate: leaseEnd ? fmtLongDate(leaseEnd) : '[end date]',
+          SmartLockCombo: smartLockCombo || '[combo not set]',
+        }
         reminders.push({
           type: 'WELCOME',
           reminderKey: `WELCOME_${isoDate(leaseStart)}`,
           renterName: name,
           email,
           message: `${name} arrives in ${days} day${days === 1 ? '' : 's'}. Send welcome email?`,
-          mailtoUrl: buildMailto(email, 'Welcome to Cahoon Hollow!', body),
+          emailSubject: 'Welcome to 1105 Cahoon Hollow Road!',
+          emailTemplate: WELCOME_EMAIL_TEMPLATE,
+          mergeFields,
           daysUntil: days,
         })
       }

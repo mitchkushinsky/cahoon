@@ -1,13 +1,13 @@
 import { useState } from 'react'
 
-export default function ReminderBanner({ reminder, onSessionDismiss, onPermanentDismiss }) {
+export default function ReminderBanner({ reminder, onSessionDismiss, onPermanentDismiss, onPreview }) {
   const [marking, setMarking] = useState(false)
-  const isJan15 = reminder.type === 'JAN_15'
+  const isJan15   = reminder.type === 'JAN_15'
+  const isWelcome = reminder.type === 'WELCOME'
 
   const handleMarkSent = async () => {
     setMarking(true)
     await onPermanentDismiss(reminder)
-    // No need to reset — banner will unmount
   }
 
   return (
@@ -17,8 +17,16 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
       <div className="flex-1 min-w-0">
         <p className="text-amber-800 font-medium leading-snug">{reminder.message}</p>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
-          {isJan15 && reminder.mailtoUrls?.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
+          {/* Email action */}
+          {isWelcome ? (
+            <button
+              onClick={() => onPreview(reminder)}
+              className="text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+            >
+              Preview &amp; Copy
+            </button>
+          ) : isJan15 && reminder.mailtoUrls?.length > 1 ? (
             reminder.mailtoUrls.map(({ name, url }) => (
               <a
                 key={name}
@@ -37,6 +45,7 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
             </a>
           )}
 
+          {/* Permanent dismiss */}
           <button
             onClick={handleMarkSent}
             disabled={marking}
@@ -47,6 +56,7 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
         </div>
       </div>
 
+      {/* Session dismiss */}
       <button
         onClick={() => onSessionDismiss(reminder)}
         className="flex-shrink-0 text-amber-400 hover:text-amber-600 text-lg leading-none p-0.5 -mt-0.5"

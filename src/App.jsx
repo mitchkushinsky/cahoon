@@ -9,6 +9,7 @@ import SplitRenterModal from './components/SplitRenterModal'
 import VacantModal from './components/VacantModal'
 import OwnerUseModal from './components/OwnerUseModal'
 import ReminderBanner from './components/ReminderBanner'
+import WelcomeEmailModal from './components/WelcomeEmailModal'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -23,6 +24,7 @@ export default function App() {
   const [selected, setSelected] = useState(null)
   const [sessionDismissed, setSessionDismissed] = useState([])       // keys dismissed this session
   const [permanentDismissals, setPermanentDismissals] = useState([])  // keys from Supabase
+  const [previewReminder, setPreviewReminder] = useState(null)        // welcome email preview
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -158,6 +160,7 @@ export default function App() {
                 reminder={r}
                 onSessionDismiss={sessionDismiss}
                 onPermanentDismiss={permanentDismiss}
+                onPreview={setPreviewReminder}
               />
             ))}
           </div>
@@ -178,6 +181,14 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Welcome email preview modal */}
+      {previewReminder && (
+        <WelcomeEmailModal
+          reminder={previewReminder}
+          onClose={() => setPreviewReminder(null)}
+        />
+      )}
 
       {/* Modal */}
       {selected && (

@@ -68,6 +68,8 @@ export function toISODate(date) {
 // M=12 Payment 2 – Actual             ← maps to payment2Actual
 // N=13 Payment 3 – 30 days Owed      ← maps to finalOwed
 // O=14 Payment 3 – Actual             ← maps to finalActual
+// P=15 Lease URL                      ← maps to leaseUrl
+// Q=16 Smart Lock Combo               ← maps to smartLockCombo
 
 function parseRow(row) {
   const name      = (row[0] || '').trim()
@@ -92,6 +94,7 @@ function parseRow(row) {
   const finalOwed      = parseAmount(row[13])
   const finalActual    = parseActualPayment(row[14])
   const leaseUrl       = (row[15] || '').trim() || null  // col P
+  const smartLockCombo = (row[16] || '').trim() || null  // col Q
 
   // Backward-compat wrapper so paymentLogic and modal components can reach
   // renterInfo.name, renterInfo.email, renterInfo.dates.{start,end}
@@ -99,6 +102,7 @@ function parseRow(row) {
     name,
     email,
     dates: { start: startDate, end: endDate },
+    smartLockCombo,
   }
 
   return {
@@ -112,6 +116,7 @@ function parseRow(row) {
     depositSummary,
     leaseStatus,
     leaseUrl,
+    smartLockCombo,
     balanceDue,
     depositOwed,
     depositActual,
