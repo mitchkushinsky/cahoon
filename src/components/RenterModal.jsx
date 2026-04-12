@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toISODate } from '../lib/parseCSV'
 import { computePayment, milestoneStatus } from '../lib/paymentLogic'
+import { buildRenterKey } from '../lib/resolvePayments'
 import AppointmentList from './AppointmentList'
+import AddPaymentDrawer from './AddPaymentDrawer'
 
 function fmt(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
@@ -23,10 +25,17 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
   const [commentText, setCommentText] = useState(effectiveComment || '')
   const [savingComment, setSavingComment] = useState(false)
   const [commentSaved, setCommentSaved] = useState(false)
+  const [showAddPayment, setShowAddPayment] = useState(false)
 
   const { milestones, totalPaid, totalDueNow, totalCredit, hasMismatch, badge } = computePayment(week)
   const balanceRemaining = Math.max(0, totalRent - totalPaid)
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
+
+  // Next unpaid milestone: first with owed > 0 and no recorded payment
+  const nextUnpaidIdx = milestones.findIndex(m => m.amountOwed > 0 && !(m.actual?.amount > 0))
+  const hasUnpaid = nextUnpaidIdx >= 0
+
+  const renterKey = buildRenterKey(week)
 
   const fmtDate = (d) => d
     ? (d instanceof Date
@@ -144,11 +153,19 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
           </p>
         )}
 
-        {/* Overall badge */}
-        <div className="pt-1">
+        {/* Overall badge + Add Payment */}
+        <div className="flex items-center justify-between pt-1">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${badgeClass[badge.color]}`}>
             {badge.emoji} {badge.label}
           </span>
+          {hasUnpaid && (
+            <button
+              onClick={() => setShowAddPayment(true)}
+              className="text-sm font-semibold text-blue-600 border border-blue-200 rounded-full px-3 py-1 hover:bg-blue-50 transition-colors"
+            >
+              + Add Payment
+            </button>
+          )}
         </div>
       </div>
 
@@ -172,6 +189,16 @@ export default function RenterModal({ week, appointments, commentOverride, onClo
       </div>
 
       <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} />
+
+      {showAddPayment && (
+        <AddPaymentDrawer
+          renterKey={renterKey}
+          milestone={milestones[nextUnpaidIdx]}
+          milestoneNumber={nextUnpaidIdx + 1}
+          onSave={() => { setShowAddPayment(false); onRefresh() }}
+          onClose={() => setShowAddPayment(false)}
+        />
+      )}
     </div>
   )
 }

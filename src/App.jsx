@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { parseCSV, toISODate } from './lib/parseCSV'
 import { computeReminders } from './lib/reminders'
+import { resolveWeeksPayments } from './lib/resolvePayments'
+import { seedPaymentsFromCSV } from './lib/seedPayments'
 import { supabase } from './lib/supabase'
 import WeekCard from './components/WeekCard'
 import Modal from './components/Modal'
@@ -19,18 +21,19 @@ export default function App() {
   const [ownerUse, setOwnerUse] = useState([])
   const [appointments, setAppointments] = useState([])
   const [commentOverrides, setCommentOverrides] = useState([])
+  const [paymentRecords, setPaymentRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
-  const [sessionDismissed, setSessionDismissed] = useState([])       // keys dismissed this session
-  const [permanentDismissals, setPermanentDismissals] = useState([])  // keys from Supabase
-  const [previewReminder, setPreviewReminder] = useState(null)        // welcome email preview
+  const [sessionDismissed, setSessionDismissed] = useState([])
+  const [permanentDismissals, setPermanentDismissals] = useState([])
+  const [previewReminder, setPreviewReminder] = useState(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [csvResp, ouResp, apptResp, coResp, rdResp] = await Promise.all([
+      const [csvResp, ouResp, apptResp, coResp, prResp, rdResp] = await Promise.all([
         fetch(CSV_URL).then(r => {
           if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
           return r.text()
@@ -38,12 +41,24 @@ export default function App() {
         supabase.from('owner_use').select('*'),
         supabase.from('appointments').select('*'),
         supabase.from('comment_overrides').select('*'),
+        supabase.from('payment_records').select('*'),
         supabase.from('reminder_dismissals').select('reminder_key'),
       ])
-      setWeeks(parseCSV(csvResp))
+
+      const parsedWeeks = parseCSV(csvResp)
+      const initialPaymentRecords = prResp.data || []
+
+      // Seed CSV payment data for any renter not yet in Supabase (one-time migration)
+      await seedPaymentsFromCSV(parsedWeeks, initialPaymentRecords)
+
+      // Re-fetch payment_records after potential seeding
+      const { data: freshPR } = await supabase.from('payment_records').select('*')
+
+      setWeeks(parsedWeeks)
       setOwnerUse(ouResp.data || [])
       setAppointments(apptResp.data || [])
       setCommentOverrides(coResp.data || [])
+      setPaymentRecords(freshPR || [])
       setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
@@ -55,14 +70,16 @@ export default function App() {
   useEffect(() => { loadData() }, [loadData])
 
   const refreshSupabase = useCallback(async () => {
-    const [ouResp, apptResp, coResp] = await Promise.all([
+    const [ouResp, apptResp, coResp, prResp] = await Promise.all([
       supabase.from('owner_use').select('*'),
       supabase.from('appointments').select('*'),
       supabase.from('comment_overrides').select('*'),
+      supabase.from('payment_records').select('*'),
     ])
     setOwnerUse(ouResp.data || [])
     setAppointments(apptResp.data || [])
     setCommentOverrides(coResp.data || [])
+    setPaymentRecords(prResp.data || [])
   }, [])
 
   const getOwnerUseRow = (weekStart) =>
@@ -72,12 +89,20 @@ export default function App() {
     commentOverrides.find(r => r.week_start === toISODate(weekStart))
 
   const closeModal = () => setSelected(null)
-
   const handleRefresh = () => { refreshSupabase(); closeModal() }
   const handleRefreshKeepOpen = () => refreshSupabase()
 
-  // Compute reminders, filtering out session and permanently dismissed
-  const allReminders = weeks.length > 0 ? computeReminders(weeks) : []
+  // Merge Supabase payment records into weeks (Supabase takes precedence over CSV)
+  const resolvedWeeks = resolveWeeksPayments(weeks, paymentRecords)
+
+  // Always derive the selected week from resolvedWeeks so payment updates
+  // propagate to the open modal without reopening it.
+  const resolvedSelected = selected
+    ? resolvedWeeks.find(w => w.weekKey === selected.weekKey) ?? selected
+    : null
+
+  // Compute reminders using resolved payment data
+  const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks) : []
   const visibleReminders = allReminders.filter(r =>
     !sessionDismissed.includes(r.reminderKey) &&
     !permanentDismissals.includes(r.reminderKey)
@@ -88,7 +113,6 @@ export default function App() {
   }
 
   const permanentDismiss = async (reminder) => {
-    // Optimistically hide immediately
     setPermanentDismissals(prev => [...prev, reminder.reminderKey])
     await supabase.from('reminder_dismissals').upsert(
       { reminder_key: reminder.reminderKey },
@@ -108,10 +132,10 @@ export default function App() {
     } catch {}
   }, [visibleReminders.length])
 
-  const selectedOwnerUse = selected ? getOwnerUseRow(selected.weekStart) : null
-  const selectedIsOwner  = selected ? (selected.isOwnerSheet || !!selectedOwnerUse) : false
-  const selectedIsSplit  = selected?.type === 'split' && !selectedIsOwner
-  const selectedIsRenter = selected?.type === 'renter' && !selectedIsOwner
+  const selectedOwnerUse = resolvedSelected ? getOwnerUseRow(resolvedSelected.weekStart) : null
+  const selectedIsOwner  = resolvedSelected ? (resolvedSelected.isOwnerSheet || !!selectedOwnerUse) : false
+  const selectedIsSplit  = resolvedSelected?.type === 'split' && !selectedIsOwner
+  const selectedIsRenter = resolvedSelected?.type === 'renter' && !selectedIsOwner
 
   return (
     <div className="min-h-dvh bg-gray-50">
@@ -166,9 +190,9 @@ export default function App() {
           </div>
         )}
 
-        {weeks.length > 0 && (
+        {resolvedWeeks.length > 0 && (
           <div className="space-y-2">
-            {weeks.map(week => (
+            {resolvedWeeks.map(week => (
               <WeekCard
                 key={week.weekKey}
                 week={week}
@@ -191,28 +215,28 @@ export default function App() {
       )}
 
       {/* Modal */}
-      {selected && (
+      {resolvedSelected && (
         <Modal onClose={closeModal}>
           {({ onClose }) =>
             selectedIsSplit ? (
               <SplitRenterModal
-                week={selected}
+                week={resolvedSelected}
                 appointments={appointments}
-                commentOverride={getCommentOverride(selected.weekStart)}
+                commentOverride={getCommentOverride(resolvedSelected.weekStart)}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
               />
             ) : selectedIsRenter ? (
               <RenterModal
-                week={selected}
+                week={resolvedSelected}
                 appointments={appointments}
-                commentOverride={getCommentOverride(selected.weekStart)}
+                commentOverride={getCommentOverride(resolvedSelected.weekStart)}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
               />
             ) : selectedIsOwner ? (
               <OwnerUseModal
-                week={selected}
+                week={resolvedSelected}
                 ownerUseRow={selectedOwnerUse}
                 appointments={appointments}
                 onClose={onClose}
@@ -220,7 +244,7 @@ export default function App() {
               />
             ) : (
               <VacantModal
-                week={selected}
+                week={resolvedSelected}
                 appointments={appointments}
                 onClose={onClose}
                 onRefresh={handleRefresh}

@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toISODate } from '../lib/parseCSV'
 import { computePayment, milestoneStatus } from '../lib/paymentLogic'
+import { buildRenterKey } from '../lib/resolvePayments'
 import AppointmentList from './AppointmentList'
+import AddPaymentDrawer from './AddPaymentDrawer'
 
 function fmt(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
@@ -15,11 +17,17 @@ const badgeClass = {
   gray:   'bg-gray-100 text-gray-500',
 }
 
-function RenterSection({ renter, index }) {
+function RenterSection({ renter, index, onRefresh }) {
   const { renterInfo, totalRent, leaseStatus, leaseUrl } = renter
   const { name, email, dates } = renterInfo
   const { milestones, totalPaid, totalCredit, hasMismatch, badge } = computePayment(renter)
   const balanceRemaining = Math.max(0, totalRent - totalPaid)
+
+  const nextUnpaidIdx = milestones.findIndex(m => m.amountOwed > 0 && !(m.actual?.amount > 0))
+  const hasUnpaid = nextUnpaidIdx >= 0
+  const [showAddPayment, setShowAddPayment] = useState(false)
+
+  const renterKey = buildRenterKey(renter)
 
   const fmtDate = d =>
     d instanceof Date
@@ -120,12 +128,31 @@ function RenterSection({ renter, index }) {
           </p>
         )}
 
-        <div>
+        {/* Badge + Add Payment */}
+        <div className="flex items-center justify-between">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${badgeClass[badge.color]}`}>
             {badge.emoji} {badge.label}
           </span>
+          {hasUnpaid && (
+            <button
+              onClick={() => setShowAddPayment(true)}
+              className="text-sm font-semibold text-blue-600 border border-blue-200 rounded-full px-3 py-1 hover:bg-blue-50 transition-colors"
+            >
+              + Add Payment
+            </button>
+          )}
         </div>
       </div>
+
+      {showAddPayment && (
+        <AddPaymentDrawer
+          renterKey={renterKey}
+          milestone={milestones[nextUnpaidIdx]}
+          milestoneNumber={nextUnpaidIdx + 1}
+          onSave={() => { setShowAddPayment(false); onRefresh() }}
+          onClose={() => setShowAddPayment(false)}
+        />
+      )}
     </div>
   )
 }
@@ -166,7 +193,7 @@ export default function SplitRenterModal({ week, appointments, commentOverride, 
       {renters.map((renter, i) => (
         <div key={i}>
           {i > 0 && <div className="border-t-2 border-dashed border-gray-200 pt-5" />}
-          <RenterSection renter={renter} index={i} />
+          <RenterSection renter={renter} index={i} onRefresh={onRefresh} />
         </div>
       ))}
 
