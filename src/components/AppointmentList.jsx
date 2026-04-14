@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import AppointmentForm from './AppointmentForm'
 
-export default function AppointmentList({ appointments, weekStart, onRefresh }) {
+export default function AppointmentList({ appointments, weekStart, onRefresh, isAdmin = true }) {
   const [adding, setAdding] = useState(false)
 
   const handleDelete = async (id) => {
@@ -14,7 +14,7 @@ export default function AppointmentList({ appointments, weekStart, onRefresh }) 
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Appointments</h3>
-        {!adding && (
+        {isAdmin && !adding && (
           <button
             onClick={() => setAdding(true)}
             className="text-xs text-blue-600 font-medium hover:underline"
@@ -38,12 +38,14 @@ export default function AppointmentList({ appointments, weekStart, onRefresh }) 
             <p className="text-xs text-gray-400">{appt.date}</p>
             {appt.notes && <p className="text-xs text-gray-500 mt-0.5">{appt.notes}</p>}
           </div>
-          <button
-            onClick={() => handleDelete(appt.id)}
-            className="text-gray-300 hover:text-red-400 text-lg leading-none transition-colors"
-          >
-            ×
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => handleDelete(appt.id)}
+              className="text-gray-300 hover:text-red-400 text-lg leading-none transition-colors"
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
 

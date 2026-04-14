@@ -91,14 +91,15 @@ function RenterChip({ renter, weekStart }) {
   )
 }
 
-export default function WeekCard({ week, ownerUseRow, appointments, commentOverride, onClick }) {
+export default function WeekCard({ week, ownerUseRow, appointments, commentOverride, caretakerNote, isAdmin, onClick }) {
   const { weekStart, type, isOwnerSheet, comment, renterInfo, totalRent, renters, startDate, endDate } = week
   const weekKey     = toISODate(weekStart)
   const isOwner     = isOwnerSheet || !!ownerUseRow
   const resolvedType = isOwner ? 'owner' : type
 
-  const weekAppts  = appointments.filter(a => a.week_start === weekKey)
-  const hasComment = !!(commentOverride?.comment ?? comment)
+  const weekAppts         = appointments.filter(a => a.week_start === weekKey)
+  const hasComment        = !!(commentOverride?.comment ?? comment)
+  const hasCaretakerNote  = !!(caretakerNote?.note)
 
   const apptIcon = (type) => type === 'cleaning' ? '🧹' : type === 'exterminator' ? '🦟' : '🔨'
   const fmtApptDate = (dateStr) => {
@@ -164,7 +165,8 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-          {hasComment && <span title="Has comment" className="text-gray-400 text-sm">💬</span>}
+          {isAdmin && hasComment      && <span title="Owner comment" className="text-gray-400 text-sm">💬</span>}
+          {hasCaretakerNote           && <span title={isAdmin ? "Caretaker note" : "Note"} className="text-gray-400 text-sm">📋</span>}
         </div>
       </div>
 

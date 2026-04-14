@@ -17,11 +17,14 @@ import ICSImportModal from './components/ICSImportModal'
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
 
+const isAdmin = new URLSearchParams(window.location.search).get('mode') !== 'caretaker'
+
 export default function App() {
   const [weeks, setWeeks] = useState([])
   const [ownerUse, setOwnerUse] = useState([])
   const [appointments, setAppointments] = useState([])
   const [commentOverrides, setCommentOverrides] = useState([])
+  const [caretakerNotes, setCaretakerNotes] = useState([])
   const [paymentRecords, setPaymentRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -35,7 +38,7 @@ export default function App() {
     setLoading(true)
     setError(null)
     try {
-      const [csvResp, ouResp, apptResp, coResp, prResp, rdResp] = await Promise.all([
+      const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp] = await Promise.all([
         fetch(CSV_URL).then(r => {
           if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
           return r.text()
@@ -43,6 +46,7 @@ export default function App() {
         supabase.from('owner_use').select('*'),
         supabase.from('appointments').select('*'),
         supabase.from('comment_overrides').select('*'),
+        supabase.from('caretaker_notes').select('*'),
         supabase.from('payment_records').select('*'),
         supabase.from('reminder_dismissals').select('reminder_key'),
       ])
@@ -60,6 +64,7 @@ export default function App() {
       setOwnerUse(ouResp.data || [])
       setAppointments(apptResp.data || [])
       setCommentOverrides(coResp.data || [])
+      setCaretakerNotes(cnResp.data || [])
       setPaymentRecords(freshPR || [])
       setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
     } catch (err) {
@@ -72,15 +77,17 @@ export default function App() {
   useEffect(() => { loadData() }, [loadData])
 
   const refreshSupabase = useCallback(async () => {
-    const [ouResp, apptResp, coResp, prResp] = await Promise.all([
+    const [ouResp, apptResp, coResp, cnResp, prResp] = await Promise.all([
       supabase.from('owner_use').select('*'),
       supabase.from('appointments').select('*'),
       supabase.from('comment_overrides').select('*'),
+      supabase.from('caretaker_notes').select('*'),
       supabase.from('payment_records').select('*'),
     ])
     setOwnerUse(ouResp.data || [])
     setAppointments(apptResp.data || [])
     setCommentOverrides(coResp.data || [])
+    setCaretakerNotes(cnResp.data || [])
     setPaymentRecords(prResp.data || [])
   }, [])
 
@@ -89,6 +96,9 @@ export default function App() {
 
   const getCommentOverride = (weekStart) =>
     commentOverrides.find(r => r.week_start === toISODate(weekStart))
+
+  const getCaretakerNote = (weekStart) =>
+    caretakerNotes.find(r => r.week_start === toISODate(weekStart))
 
   const closeModal = () => setSelected(null)
   const handleRefresh = () => { refreshSupabase(); closeModal() }
@@ -152,12 +162,14 @@ export default function App() {
             <p className="text-xs text-gray-400 leading-tight">Rental Property Manager</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowICSImport(true)}
-              className="text-sm text-gray-500 font-medium hover:text-gray-700"
-            >
-              Import Calendar
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowICSImport(true)}
+                className="text-sm text-gray-500 font-medium hover:text-gray-700"
+              >
+                Import Calendar
+              </button>
+            )}
             <button
               onClick={loadData}
               disabled={loading}
@@ -186,7 +198,7 @@ export default function App() {
           </div>
         )}
 
-        {visibleReminders.length > 0 && (
+        {isAdmin && visibleReminders.length > 0 && (
           <div className="space-y-2 mb-4">
             {visibleReminders.map((r, i) => (
               <ReminderBanner
@@ -209,6 +221,8 @@ export default function App() {
                 ownerUseRow={getOwnerUseRow(week.weekStart)}
                 appointments={appointments}
                 commentOverride={getCommentOverride(week.weekStart)}
+                caretakerNote={getCaretakerNote(week.weekStart)}
+                isAdmin={isAdmin}
                 onClick={() => setSelected(week)}
               />
             ))}
@@ -241,6 +255,8 @@ export default function App() {
                 week={resolvedSelected}
                 appointments={appointments}
                 commentOverride={getCommentOverride(resolvedSelected.weekStart)}
+                caretakerNote={getCaretakerNote(resolvedSelected.weekStart)}
+                isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
               />
@@ -249,6 +265,8 @@ export default function App() {
                 week={resolvedSelected}
                 appointments={appointments}
                 commentOverride={getCommentOverride(resolvedSelected.weekStart)}
+                caretakerNote={getCaretakerNote(resolvedSelected.weekStart)}
+                isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
               />
@@ -257,6 +275,8 @@ export default function App() {
                 week={resolvedSelected}
                 ownerUseRow={selectedOwnerUse}
                 appointments={appointments}
+                caretakerNote={getCaretakerNote(resolvedSelected.weekStart)}
+                isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefresh}
               />
@@ -264,6 +284,8 @@ export default function App() {
               <VacantModal
                 week={resolvedSelected}
                 appointments={appointments}
+                caretakerNote={getCaretakerNote(resolvedSelected.weekStart)}
+                isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefresh}
               />
