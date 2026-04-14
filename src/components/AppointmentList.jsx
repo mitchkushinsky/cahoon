@@ -30,7 +30,9 @@ export default function AppointmentList({ appointments, weekStart, onRefresh }) 
 
       {appointments.map(appt => (
         <div key={appt.id} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
-          <span className="text-base mt-0.5">{appt.type === 'cleaning' ? '🧹' : '🔧'}</span>
+          <span className="text-base mt-0.5">
+            {appt.type === 'cleaning' ? '🧹' : appt.type === 'exterminator' ? '🦟' : '🔨'}
+          </span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-800">{appt.title}</p>
             <p className="text-xs text-gray-400">{appt.date}</p>

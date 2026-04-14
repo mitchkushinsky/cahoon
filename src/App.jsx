@@ -12,6 +12,7 @@ import VacantModal from './components/VacantModal'
 import OwnerUseModal from './components/OwnerUseModal'
 import ReminderBanner from './components/ReminderBanner'
 import WelcomeEmailModal from './components/WelcomeEmailModal'
+import ICSImportModal from './components/ICSImportModal'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -28,6 +29,7 @@ export default function App() {
   const [sessionDismissed, setSessionDismissed] = useState([])
   const [permanentDismissals, setPermanentDismissals] = useState([])
   const [previewReminder, setPreviewReminder] = useState(null)
+  const [showICSImport, setShowICSImport] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -45,7 +47,7 @@ export default function App() {
         supabase.from('reminder_dismissals').select('reminder_key'),
       ])
 
-      const parsedWeeks = parseCSV(csvResp)
+      const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
       const initialPaymentRecords = prResp.data || []
 
       // Seed CSV payment data for any renter not yet in Supabase (one-time migration)
@@ -149,13 +151,21 @@ export default function App() {
             <h1 className="text-xl font-bold text-gray-900 leading-tight">Cahoon</h1>
             <p className="text-xs text-gray-400 leading-tight">Rental Property Manager</p>
           </div>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="text-sm text-blue-600 font-medium hover:underline disabled:opacity-40"
-          >
-            {loading ? 'Loading…' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowICSImport(true)}
+              className="text-sm text-gray-500 font-medium hover:text-gray-700"
+            >
+              Import Calendar
+            </button>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="text-sm text-blue-600 font-medium hover:underline disabled:opacity-40"
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -205,6 +215,14 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* ICS import modal */}
+      {showICSImport && (
+        <ICSImportModal
+          onClose={() => setShowICSImport(false)}
+          onImported={() => { refreshSupabase(); setShowICSImport(false) }}
+        />
+      )}
 
       {/* Welcome email preview modal */}
       {previewReminder && (

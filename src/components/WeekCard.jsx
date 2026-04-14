@@ -97,10 +97,18 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
   const isOwner     = isOwnerSheet || !!ownerUseRow
   const resolvedType = isOwner ? 'owner' : type
 
-  const weekAppts   = appointments.filter(a => a.week_start === weekKey)
-  const hasCleaning = weekAppts.some(a => a.type === 'cleaning')
-  const hasRepair   = weekAppts.some(a => a.type === 'repair')
-  const hasComment  = !!(commentOverride?.comment ?? comment)
+  const weekAppts  = appointments.filter(a => a.week_start === weekKey)
+  const hasComment = !!(commentOverride?.comment ?? comment)
+
+  const apptIcon = (type) => type === 'cleaning' ? '🧹' : type === 'exterminator' ? '🦟' : '🔨'
+  const fmtApptDate = (dateStr) => {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const visibleAppts  = weekAppts.slice(0, 3)
+  const extraApptCount = weekAppts.length - 2
+  const showOverflow  = weekAppts.length > 3
 
   let singleBadge = null
   if (resolvedType === 'renter' && totalRent > 0) {
@@ -156,11 +164,22 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-          {hasCleaning && <span title="Cleaning">🧹</span>}
-          {hasRepair   && <span title="Repair">🔧</span>}
-          {hasComment  && <span title="Has comment" className="text-gray-400 text-sm">💬</span>}
+          {hasComment && <span title="Has comment" className="text-gray-400 text-sm">💬</span>}
         </div>
       </div>
+
+      {weekAppts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
+          {(showOverflow ? weekAppts.slice(0, 2) : visibleAppts).map((appt, i) => (
+            <span key={i} className="text-xs text-gray-500">
+              {apptIcon(appt.type)} {fmtApptDate(appt.date)}
+            </span>
+          ))}
+          {showOverflow && (
+            <span className="text-xs text-gray-400">+{extraApptCount} more</span>
+          )}
+        </div>
+      )}
     </button>
   )
 }

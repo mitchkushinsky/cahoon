@@ -26,17 +26,21 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel }) {
   return (
     <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
       <div className="flex gap-2">
-        {['cleaning', 'repair'].map(t => (
+        {[
+          { value: 'cleaning',     label: '🧹 Cleaning' },
+          { value: 'repair',       label: '🔨 Repair' },
+          { value: 'exterminator', label: '🦟 Exterminator' },
+        ].map(({ value, label }) => (
           <button
-            key={t}
-            onClick={() => setType(t)}
+            key={value}
+            onClick={() => setType(value)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              type === t
+              type === value
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
             }`}
           >
-            {t === 'cleaning' ? '🧹 Cleaning' : '🔧 Repair'}
+            {label}
           </button>
         ))}
       </div>

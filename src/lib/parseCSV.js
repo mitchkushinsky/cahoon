@@ -138,11 +138,21 @@ function prevSunday(date) {
   return d
 }
 
-function buildCalendar(entries) {
+function buildCalendar(entries, appointments = []) {
   const valid = entries.filter(e => e.startDate && e.endDate)
   if (!valid.length) return []
 
-  const minStart = new Date(Math.min(...valid.map(e => e.startDate.getTime())))
+  // Factor in appointment dates so weeks before the first rental
+  // but with appointments are included in the calendar.
+  const apptDates = appointments
+    .map(a => { const [y,m,d] = a.date.split('-').map(Number); return new Date(y, m-1, d) })
+    .filter(d => !isNaN(d.getTime()))
+
+  const allStartMs = [
+    ...valid.map(e => e.startDate.getTime()),
+    ...apptDates.map(d => d.getTime()),
+  ]
+  const minStart = new Date(Math.min(...allStartMs))
   const maxEnd   = new Date(Math.max(...valid.map(e => e.endDate.getTime())))
 
   // Generate every Sunday from prevSunday(minStart) through prevSunday(maxEnd)
@@ -207,7 +217,7 @@ function buildCalendar(entries) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function parseCSV(csvText) {
+export function parseCSV(csvText, appointments = []) {
   const { data: rows } = Papa.parse(csvText, { skipEmptyLines: true })
 
   // Row 0 is the header — skip it
@@ -215,5 +225,5 @@ export function parseCSV(csvText) {
 
   const entries = dataRows.map(parseRow).filter(Boolean)
 
-  return buildCalendar(entries)
+  return buildCalendar(entries, appointments)
 }
