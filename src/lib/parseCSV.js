@@ -138,7 +138,7 @@ function prevSunday(date) {
   return d
 }
 
-function buildCalendar(entries, appointments = []) {
+export function buildCalendar(entries, appointments = []) {
   const valid = entries.filter(e => e.startDate && e.endDate)
   if (!valid.length) return []
 
@@ -217,13 +217,12 @@ function buildCalendar(entries, appointments = []) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function parseCSV(csvText, appointments = []) {
+export function parseCSVEntries(csvText) {
   const { data: rows } = Papa.parse(csvText, { skipEmptyLines: true })
-
-  // Row 0 is the header — skip it
   const dataRows = rows.slice(1).filter(row => row.some(cell => cell?.trim()))
+  return dataRows.map(parseRow).filter(Boolean)
+}
 
-  const entries = dataRows.map(parseRow).filter(Boolean)
-
-  return buildCalendar(entries, appointments)
+export function parseCSV(csvText, appointments = []) {
+  return buildCalendar(parseCSVEntries(csvText), appointments)
 }

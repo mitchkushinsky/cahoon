@@ -18,8 +18,128 @@ const badgeClass = {
   gray:   'bg-gray-100 text-gray-500',
 }
 
-export default function RenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh }) {
-  const { weekStart, renterInfo, totalRent, leaseStatus, leaseUrl, comment } = week
+function calcMilestones(totalRent) {
+  const rent = Number(totalRent) || 0
+  if (!rent) return { payment1_owed: null, payment2_owed: null, payment3_owed: null }
+  const deposit  = 500
+  const payment2 = (rent - deposit) / 2
+  const payment3 = rent - deposit - payment2
+  return { payment1_owed: deposit, payment2_owed: payment2, payment3_owed: payment3 }
+}
+
+// ─── EditRentalForm ───────────────────────────────────────────────────────────
+
+function EditRentalForm({ week, onSaved, onCancel }) {
+  const [startDate,     setStartDate]     = useState(toISODate(week.startDate))
+  const [endDate,       setEndDate]       = useState(toISODate(week.endDate))
+  const [totalRent,     setTotalRent]     = useState(week.totalRent || '')
+  const [leaseStatus,   setLeaseStatus]   = useState(week.leaseStatus || '')
+  const [leaseUrl,      setLeaseUrl]      = useState(week.leaseUrl || '')
+  const [smartLock,     setSmartLock]     = useState(week.smartLockCombo || '')
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState(null)
+
+  const handleSave = async () => {
+    if (!startDate || !endDate) return
+    setSaving(true)
+    setError(null)
+    try {
+      const milestones = calcMilestones(totalRent)
+      const { error: err } = await supabase
+        .from('rentals')
+        .update({
+          start_date:    startDate,
+          end_date:      endDate,
+          total_rent:    totalRent ? Number(totalRent) : null,
+          lease_status:  leaseStatus.trim() || null,
+          lease_url:     leaseUrl.trim() || null,
+          smart_lock_combo: smartLock.trim() || null,
+          ...milestones,
+        })
+        .eq('id', week.rentalId)
+      if (err) throw new Error(err.message)
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
+
+  return (
+    <div className="space-y-3 border border-blue-200 rounded-xl p-4 bg-blue-50">
+      <p className="text-sm font-medium text-blue-800">Edit Rental</p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">End Date</label>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+        </div>
+      </div>
+
+      <input
+        type="number"
+        placeholder="Total Rent"
+        value={totalRent}
+        onChange={e => setTotalRent(e.target.value)}
+        className={inputCls}
+      />
+      <input
+        type="text"
+        placeholder="Lease Status"
+        value={leaseStatus}
+        onChange={e => setLeaseStatus(e.target.value)}
+        className={inputCls}
+      />
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Lease URL (Google Drive link)</label>
+        <input
+          type="text"
+          placeholder="https://drive.google.com/…"
+          value={leaseUrl}
+          onChange={e => setLeaseUrl(e.target.value)}
+          className={inputCls}
+        />
+      </div>
+      <input
+        type="text"
+        placeholder="Smart Lock Combo"
+        value={smartLock}
+        onChange={e => setSmartLock(e.target.value)}
+        className={inputCls}
+      />
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      <div className="flex gap-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
+        >
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── RenterModal ──────────────────────────────────────────────────────────────
+
+export default function RenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh, onFullRefresh }) {
+  const { weekStart, renterInfo, totalRent, leaseStatus, leaseUrl, comment, source, rentalId } = week
   const { name, email, dates } = renterInfo
 
   const effectiveComment = commentOverride?.comment ?? comment
@@ -27,12 +147,14 @@ export default function RenterModal({ week, appointments, commentOverride, caret
   const [savingComment, setSavingComment] = useState(false)
   const [commentSaved, setCommentSaved] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const { milestones, totalPaid, totalDueNow, totalCredit, hasMismatch, badge } = computePayment(week)
   const balanceRemaining = Math.max(0, totalRent - totalPaid)
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
-  // Next unpaid milestone: first with owed > 0 and no recorded payment
   const nextUnpaidIdx = milestones.findIndex(m => m.amountOwed > 0 && !(m.actual?.amount > 0))
   const hasUnpaid = nextUnpaidIdx >= 0
 
@@ -54,6 +176,13 @@ export default function RenterModal({ week, appointments, commentOverride, caret
     setCommentSaved(true)
     setTimeout(() => setCommentSaved(false), 2000)
     onRefresh()
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    await supabase.from('rentals').delete().eq('id', rentalId)
+    setDeleting(false)
+    onFullRefresh()
   }
 
   return (
@@ -189,6 +318,57 @@ export default function RenterModal({ week, appointments, commentOverride, caret
             >
               {commentSaved ? '✓ Saved' : savingComment ? 'Saving…' : 'Save Comment'}
             </button>
+          </div>
+
+          {/* Edit / Delete */}
+          <div className="space-y-2 pt-1">
+            {!showEdit && !confirmDelete && (
+              <>
+                <button
+                  onClick={() => setShowEdit(true)}
+                  className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  ✏️ Edit Rental
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full py-2.5 rounded-xl text-sm font-medium border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  🗑 Delete Rental
+                </button>
+              </>
+            )}
+
+            {showEdit && (
+              <EditRentalForm
+                week={week}
+                onSaved={onFullRefresh}
+                onCancel={() => setShowEdit(false)}
+              />
+            )}
+
+            {confirmDelete && (
+              <div className="border border-red-200 rounded-xl p-4 bg-red-50 space-y-3">
+                <p className="text-sm font-medium text-red-800">
+                  Remove {name} from this week? This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 py-2 rounded-lg text-sm font-medium bg-red-600 text-white disabled:opacity-40 hover:bg-red-700 transition-colors"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

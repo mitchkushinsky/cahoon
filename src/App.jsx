@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { parseCSV, toISODate } from './lib/parseCSV'
+import { buildSupabaseCalendar } from './lib/supabaseRentals'
 import { computeReminders } from './lib/reminders'
 import { resolveWeeksPayments } from './lib/resolvePayments'
 import { seedPaymentsFromCSV } from './lib/seedPayments'
@@ -13,9 +14,15 @@ import OwnerUseModal from './components/OwnerUseModal'
 import ReminderBanner from './components/ReminderBanner'
 import WelcomeEmailModal from './components/WelcomeEmailModal'
 import ICSImportModal from './components/ICSImportModal'
+import SettingsScreen from './components/SettingsScreen'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
+
+// Switch to true after 2026 data has been migrated to Supabase.
+// When true: calendar is built from Supabase rentals table (CSV fetch is skipped).
+// When false: existing CSV-based behavior (safe fallback / testing).
+const USE_SUPABASE_RENTALS = true
 
 const isAdmin = new URLSearchParams(window.location.search).get('mode') !== 'caretaker'
 
@@ -33,40 +40,68 @@ export default function App() {
   const [permanentDismissals, setPermanentDismissals] = useState([])
   const [previewReminder, setPreviewReminder] = useState(null)
   const [showICSImport, setShowICSImport] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp] = await Promise.all([
-        fetch(CSV_URL).then(r => {
-          if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
-          return r.text()
-        }),
-        supabase.from('owner_use').select('*'),
-        supabase.from('appointments').select('*'),
-        supabase.from('comment_overrides').select('*'),
-        supabase.from('caretaker_notes').select('*'),
-        supabase.from('payment_records').select('*'),
-        supabase.from('reminder_dismissals').select('reminder_key'),
-      ])
+      if (USE_SUPABASE_RENTALS) {
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp] =
+          await Promise.all([
+            supabase.from('rentals').select('*'),
+            supabase.from('renters').select('*'),
+            supabase.from('appointments').select('*'),
+            supabase.from('owner_use').select('*'),
+            supabase.from('comment_overrides').select('*'),
+            supabase.from('caretaker_notes').select('*'),
+            supabase.from('payment_records').select('*'),
+            supabase.from('reminder_dismissals').select('reminder_key'),
+          ])
 
-      const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
-      const initialPaymentRecords = prResp.data || []
+        const parsedWeeks = buildSupabaseCalendar(
+          rentalsResp.data || [],
+          rentersResp.data || [],
+          apptResp.data   || []
+        )
 
-      // Seed CSV payment data for any renter not yet in Supabase (one-time migration)
-      await seedPaymentsFromCSV(parsedWeeks, initialPaymentRecords)
+        setWeeks(parsedWeeks)
+        setOwnerUse(ouResp.data || [])
+        setAppointments(apptResp.data || [])
+        setCommentOverrides(coResp.data || [])
+        setCaretakerNotes(cnResp.data || [])
+        setPaymentRecords(prResp.data || [])
+        setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
+      } else {
+        // CSV fallback path
+        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp] = await Promise.all([
+          fetch(CSV_URL).then(r => {
+            if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
+            return r.text()
+          }),
+          supabase.from('owner_use').select('*'),
+          supabase.from('appointments').select('*'),
+          supabase.from('comment_overrides').select('*'),
+          supabase.from('caretaker_notes').select('*'),
+          supabase.from('payment_records').select('*'),
+          supabase.from('reminder_dismissals').select('reminder_key'),
+        ])
 
-      // Re-fetch payment_records after potential seeding
-      const { data: freshPR } = await supabase.from('payment_records').select('*')
+        const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
+        const initialPaymentRecords = prResp.data || []
 
-      setWeeks(parsedWeeks)
-      setOwnerUse(ouResp.data || [])
-      setAppointments(apptResp.data || [])
-      setCommentOverrides(coResp.data || [])
-      setCaretakerNotes(cnResp.data || [])
-      setPaymentRecords(freshPR || [])
-      setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
+        await seedPaymentsFromCSV(parsedWeeks, initialPaymentRecords)
+
+        const { data: freshPR } = await supabase.from('payment_records').select('*')
+
+        setWeeks(parsedWeeks)
+        setOwnerUse(ouResp.data || [])
+        setAppointments(apptResp.data || [])
+        setCommentOverrides(coResp.data || [])
+        setCaretakerNotes(cnResp.data || [])
+        setPaymentRecords(freshPR || [])
+        setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
+      }
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
     } finally {
@@ -76,6 +111,8 @@ export default function App() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Refreshes only ancillary Supabase tables (payments, appointments, notes).
+  // Used when the calendar structure hasn't changed — e.g. adding a payment.
   const refreshSupabase = useCallback(async () => {
     const [ouResp, apptResp, coResp, cnResp, prResp] = await Promise.all([
       supabase.from('owner_use').select('*'),
@@ -91,29 +128,26 @@ export default function App() {
     setPaymentRecords(prResp.data || [])
   }, [])
 
-  const getOwnerUseRow = (weekStart) =>
-    ownerUse.find(r => r.week_start === toISODate(weekStart))
-
-  const getCommentOverride = (weekStart) =>
-    commentOverrides.find(r => r.week_start === toISODate(weekStart))
-
-  const getCaretakerNote = (weekStart) =>
-    caretakerNotes.find(r => r.week_start === toISODate(weekStart))
+  const getOwnerUseRow    = (weekStart) => ownerUse.find(r => r.week_start === toISODate(weekStart))
+  const getCommentOverride = (weekStart) => commentOverrides.find(r => r.week_start === toISODate(weekStart))
+  const getCaretakerNote   = (weekStart) => caretakerNotes.find(r => r.week_start === toISODate(weekStart))
 
   const closeModal = () => setSelected(null)
-  const handleRefresh = () => { refreshSupabase(); closeModal() }
+
+  // Full reload + close modal. Used when calendar structure may have changed
+  // (owner use marked, renter assigned, etc.)
+  const handleRefresh = () => { loadData(); closeModal() }
+
+  // Ancillary-only refresh, keeps modal open. Used for payment/note updates.
   const handleRefreshKeepOpen = () => refreshSupabase()
 
-  // Merge Supabase payment records into weeks (Supabase takes precedence over CSV)
+  // Merge Supabase payment records into weeks (Supabase takes precedence over embedded data)
   const resolvedWeeks = resolveWeeksPayments(weeks, paymentRecords)
 
-  // Always derive the selected week from resolvedWeeks so payment updates
-  // propagate to the open modal without reopening it.
   const resolvedSelected = selected
     ? resolvedWeeks.find(w => w.weekKey === selected.weekKey) ?? selected
     : null
 
-  // Compute reminders using resolved payment data
   const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks) : []
   const visibleReminders = allReminders.filter(r =>
     !sessionDismissed.includes(r.reminderKey) &&
@@ -177,6 +211,15 @@ export default function App() {
             >
               {loading ? 'Loading…' : 'Refresh'}
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-xl text-gray-400 hover:text-gray-700 transition-colors leading-none"
+                title="Settings"
+              >
+                ⚙️
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -246,7 +289,7 @@ export default function App() {
         />
       )}
 
-      {/* Modal */}
+      {/* Week detail modal */}
       {resolvedSelected && (
         <Modal onClose={closeModal}>
           {({ onClose }) =>
@@ -269,6 +312,7 @@ export default function App() {
                 isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
+                onFullRefresh={handleRefresh}
               />
             ) : selectedIsOwner ? (
               <OwnerUseModal
@@ -292,6 +336,15 @@ export default function App() {
             )
           }
         </Modal>
+      )}
+
+      {/* Settings screen — slides in from right */}
+      {showSettings && (
+        <SettingsScreen
+          csvUrl={CSV_URL}
+          onClose={() => setShowSettings(false)}
+          onDataRefresh={loadData}
+        />
       )}
     </div>
   )
