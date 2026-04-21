@@ -79,8 +79,8 @@ export default function HelpScreen({ onClose, isAdmin }) {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4">
 
-          <Section icon="🏠" title="Welcome to Cahoon">
-            <P>A rental property manager that shows your full season at a glance — who's renting, what's been paid, and what's coming up.</P>
+          <Section icon="🏠" title="Welcome to your Rental Property Manager">
+            <P>Shows your full rental season at a glance — who's renting, what's been paid, and what's coming up.</P>
           </Section>
 
           <Section icon="📅" title="The Season Calendar">

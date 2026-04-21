@@ -247,15 +247,13 @@ export default function App() {
                 ⚙️
               </button>
             )}
-            {!isDemo && (
-              <button
-                onClick={() => setShowHelp(true)}
-                className="w-6 h-6 rounded-full border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors text-xs font-bold leading-none flex items-center justify-center flex-shrink-0"
-                title="Help"
-              >
-                ?
-              </button>
-            )}
+            <button
+              onClick={() => setShowHelp(true)}
+              className="w-6 h-6 rounded-full border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors text-xs font-bold leading-none flex items-center justify-center flex-shrink-0"
+              title="Help"
+            >
+              ?
+            </button>
           </div>
         </div>
         {isDemo && (
