@@ -16,6 +16,7 @@ import ReminderBanner from './components/ReminderBanner'
 import WelcomeEmailModal from './components/WelcomeEmailModal'
 import ICSImportModal from './components/ICSImportModal'
 import SettingsScreen from './components/SettingsScreen'
+import HelpScreen from './components/HelpScreen'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -44,6 +45,7 @@ export default function App() {
   const [previewReminder, setPreviewReminder] = useState(null)
   const [showICSImport, setShowICSImport] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [demoToast, setDemoToast] = useState(false)
 
   const showDemoToast = useCallback(() => {
@@ -245,6 +247,15 @@ export default function App() {
                 ⚙️
               </button>
             )}
+            {!isDemo && (
+              <button
+                onClick={() => setShowHelp(true)}
+                className="w-6 h-6 rounded-full border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors text-xs font-bold leading-none flex items-center justify-center flex-shrink-0"
+                title="Help"
+              >
+                ?
+              </button>
+            )}
           </div>
         </div>
         {isDemo && (
@@ -389,6 +400,14 @@ export default function App() {
           csvUrl={CSV_URL}
           onClose={() => setShowSettings(false)}
           onDataRefresh={loadData}
+        />
+      )}
+
+      {/* Help screen — slides in from right */}
+      {showHelp && (
+        <HelpScreen
+          onClose={() => setShowHelp(false)}
+          isAdmin={isAdmin}
         />
       )}
 
