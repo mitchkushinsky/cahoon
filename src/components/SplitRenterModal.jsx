@@ -18,7 +18,7 @@ const badgeClass = {
   gray:   'bg-gray-100 text-gray-500',
 }
 
-function RenterSection({ renter, index, isAdmin, onRefresh }) {
+function RenterSection({ renter, index, isAdmin, onRefresh, isDemo, onDemoWrite }) {
   const { renterInfo, totalRent, leaseStatus, leaseUrl } = renter
   const { name, email, dates } = renterInfo
   const { milestones, totalPaid, totalCredit, hasMismatch, badge } = computePayment(renter)
@@ -154,6 +154,8 @@ function RenterSection({ renter, index, isAdmin, onRefresh }) {
               milestoneNumber={nextUnpaidIdx + 1}
               onSave={() => { setShowAddPayment(false); onRefresh() }}
               onClose={() => setShowAddPayment(false)}
+              isDemo={isDemo}
+              onDemoWrite={onDemoWrite}
             />
           )}
         </>
@@ -162,7 +164,7 @@ function RenterSection({ renter, index, isAdmin, onRefresh }) {
   )
 }
 
-export default function SplitRenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh }) {
+export default function SplitRenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite }) {
   const { weekStart, renters, comment } = week
 
   const effectiveComment = commentOverride?.comment ?? comment
@@ -173,6 +175,7 @@ export default function SplitRenterModal({ week, appointments, commentOverride, 
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
   const saveComment = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setSavingComment(true)
     await supabase.from('comment_overrides').upsert(
       { week_start: toISODate(weekStart), comment: commentText, updated_at: new Date().toISOString() },
@@ -198,7 +201,7 @@ export default function SplitRenterModal({ week, appointments, commentOverride, 
       {renters.map((renter, i) => (
         <div key={i}>
           {i > 0 && <div className="border-t-2 border-dashed border-gray-200 pt-5" />}
-          <RenterSection renter={renter} index={i} isAdmin={isAdmin} onRefresh={onRefresh} />
+          <RenterSection renter={renter} index={i} isAdmin={isAdmin} onRefresh={onRefresh} isDemo={isDemo} onDemoWrite={onDemoWrite} />
         </div>
       ))}
 
@@ -225,12 +228,12 @@ export default function SplitRenterModal({ week, appointments, commentOverride, 
 
       {/* Caretaker Notes (visible in both modes) */}
       <div className="border-t border-gray-100 pt-5">
-        <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} />
+        <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} isDemo={isDemo} onDemoWrite={onDemoWrite} />
       </div>
 
       {/* Shared appointments */}
       <div className="border-t border-gray-100 pt-5">
-        <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} />
+        <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} isDemo={isDemo} onDemoWrite={onDemoWrite} />
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import { toISODate } from '../lib/parseCSV'
 import AppointmentList from './AppointmentList'
 import CaretakerNotes from './CaretakerNotes'
 
-export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh }) {
+export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite }) {
   const { weekStart } = week
   const [editing, setEditing] = useState(false)
   const [notes, setNotes] = useState(ownerUseRow?.notes || '')
@@ -13,6 +13,7 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
   const saveNotes = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     await supabase.from('owner_use').upsert(
       { week_start: toISODate(weekStart), notes: notes.trim() || null },
@@ -24,6 +25,7 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
   }
 
   const removeOwnerUse = async () => {
+    if (isDemo) { onDemoWrite(); return }
     if (!confirm('Remove owner use for this week?')) return
     await supabase.from('owner_use').delete().eq('week_start', toISODate(weekStart))
     onRefresh()
@@ -81,9 +83,9 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
         </div>
       )}
 
-      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} />
+      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} isDemo={isDemo} onDemoWrite={onDemoWrite} />
 
-      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} />
+      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} isDemo={isDemo} onDemoWrite={onDemoWrite} />
 
       {/* Danger zone (admin only) */}
       {isAdmin && (

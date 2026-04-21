@@ -12,7 +12,7 @@ function addDays(date, n) {
   return d
 }
 
-function AssignRenterForm({ weekStart, onSaved, onCancel }) {
+function AssignRenterForm({ weekStart, onSaved, onCancel, isDemo, onDemoWrite }) {
   const [renters, setRenters] = useState([])
   const [search, setSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
@@ -58,6 +58,7 @@ function AssignRenterForm({ weekStart, onSaved, onCancel }) {
 
   const handleSave = async () => {
     if (!startDate || !endDate) return
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     setError(null)
 
@@ -242,7 +243,7 @@ function AssignRenterForm({ weekStart, onSaved, onCancel }) {
 
 // ─── VacantModal ──────────────────────────────────────────────────────────────
 
-export default function VacantModal({ week, appointments, caretakerNote, isAdmin, onClose, onRefresh }) {
+export default function VacantModal({ week, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite }) {
   const { weekStart } = week
   const [action, setAction] = useState(null) // null | 'owner' | 'assign'
   const [notes, setNotes] = useState('')
@@ -251,6 +252,7 @@ export default function VacantModal({ week, appointments, caretakerNote, isAdmin
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
   const saveOwnerUse = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     await supabase.from('owner_use').upsert(
       { week_start: toISODate(weekStart), notes: notes.trim() || null },
@@ -320,14 +322,16 @@ export default function VacantModal({ week, appointments, caretakerNote, isAdmin
               weekStart={weekStart}
               onSaved={() => { onRefresh(); onClose() }}
               onCancel={() => setAction(null)}
+              isDemo={isDemo}
+              onDemoWrite={onDemoWrite}
             />
           )}
         </>
       )}
 
-      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} />
+      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} isDemo={isDemo} onDemoWrite={onDemoWrite} />
 
-      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} />
+      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} isDemo={isDemo} onDemoWrite={onDemoWrite} />
     </div>
   )
 }

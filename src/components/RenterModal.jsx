@@ -29,7 +29,7 @@ function calcMilestones(totalRent) {
 
 // ─── EditRentalForm ───────────────────────────────────────────────────────────
 
-function EditRentalForm({ week, onSaved, onCancel }) {
+function EditRentalForm({ week, onSaved, onCancel, isDemo, onDemoWrite }) {
   const [startDate,     setStartDate]     = useState(toISODate(week.startDate))
   const [endDate,       setEndDate]       = useState(toISODate(week.endDate))
   const [totalRent,     setTotalRent]     = useState(week.totalRent || '')
@@ -41,6 +41,7 @@ function EditRentalForm({ week, onSaved, onCancel }) {
 
   const handleSave = async () => {
     if (!startDate || !endDate) return
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     setError(null)
     try {
@@ -138,7 +139,7 @@ function EditRentalForm({ week, onSaved, onCancel }) {
 
 // ─── RenterModal ──────────────────────────────────────────────────────────────
 
-export default function RenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh, onFullRefresh }) {
+export default function RenterModal({ week, appointments, commentOverride, caretakerNote, isAdmin, onClose, onRefresh, onFullRefresh, isDemo, onDemoWrite }) {
   const { weekStart, renterInfo, totalRent, leaseStatus, leaseUrl, comment, source, rentalId } = week
   const { name, email, dates } = renterInfo
 
@@ -167,6 +168,7 @@ export default function RenterModal({ week, appointments, commentOverride, caret
     : '—'
 
   const saveComment = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setSavingComment(true)
     await supabase.from('comment_overrides').upsert(
       { week_start: toISODate(weekStart), comment: commentText, updated_at: new Date().toISOString() },
@@ -179,6 +181,7 @@ export default function RenterModal({ week, appointments, commentOverride, caret
   }
 
   const handleDelete = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setDeleting(true)
     await supabase.from('rentals').delete().eq('id', rentalId)
     setDeleting(false)
@@ -344,6 +347,8 @@ export default function RenterModal({ week, appointments, commentOverride, caret
                 week={week}
                 onSaved={onFullRefresh}
                 onCancel={() => setShowEdit(false)}
+                isDemo={isDemo}
+                onDemoWrite={onDemoWrite}
               />
             )}
 
@@ -374,9 +379,9 @@ export default function RenterModal({ week, appointments, commentOverride, caret
       )}
 
       {/* Caretaker Notes (visible in both modes) */}
-      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} />
+      <CaretakerNotes weekStart={weekStart} caretakerNote={caretakerNote} isAdmin={isAdmin} onRefresh={onRefresh} isDemo={isDemo} onDemoWrite={onDemoWrite} />
 
-      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} />
+      <AppointmentList appointments={weekAppts} weekStart={weekStart} onRefresh={onRefresh} isAdmin={isAdmin} isDemo={isDemo} onDemoWrite={onDemoWrite} />
 
       {isAdmin && showAddPayment && (
         <AddPaymentDrawer
@@ -385,6 +390,8 @@ export default function RenterModal({ week, appointments, commentOverride, caret
           milestoneNumber={nextUnpaidIdx + 1}
           onSave={() => { setShowAddPayment(false); onRefresh() }}
           onClose={() => setShowAddPayment(false)}
+          isDemo={isDemo}
+          onDemoWrite={onDemoWrite}
         />
       )}
     </div>

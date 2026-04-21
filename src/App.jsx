@@ -4,6 +4,7 @@ import { buildSupabaseCalendar } from './lib/supabaseRentals'
 import { computeReminders } from './lib/reminders'
 import { resolveWeeksPayments } from './lib/resolvePayments'
 import { seedPaymentsFromCSV } from './lib/seedPayments'
+import { getDemoData } from './lib/demoData'
 import { supabase } from './lib/supabase'
 import WeekCard from './components/WeekCard'
 import Modal from './components/Modal'
@@ -24,7 +25,9 @@ const CSV_URL =
 // When false: existing CSV-based behavior (safe fallback / testing).
 const USE_SUPABASE_RENTALS = true
 
-const isAdmin = new URLSearchParams(window.location.search).get('mode') !== 'caretaker'
+const params  = new URLSearchParams(window.location.search)
+const isDemo  = params.get('mode') === 'demo'
+const isAdmin = params.get('mode') !== 'caretaker'
 
 export default function App() {
   const [weeks, setWeeks] = useState([])
@@ -41,10 +44,27 @@ export default function App() {
   const [previewReminder, setPreviewReminder] = useState(null)
   const [showICSImport, setShowICSImport] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [demoToast, setDemoToast] = useState(false)
+
+  const showDemoToast = useCallback(() => {
+    setDemoToast(true)
+    setTimeout(() => setDemoToast(false), 2500)
+  }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
+    if (isDemo) {
+      const { weeks: demoWeeks, appointments: demoAppts } = getDemoData()
+      setWeeks(demoWeeks)
+      setAppointments(demoAppts)
+      setOwnerUse([])
+      setCommentOverrides([])
+      setCaretakerNotes([])
+      setPaymentRecords([])
+      setLoading(false)
+      return
+    }
     try {
       if (USE_SUPABASE_RENTALS) {
         const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp] =
@@ -114,6 +134,7 @@ export default function App() {
   // Refreshes only ancillary Supabase tables (payments, appointments, notes).
   // Used when the calendar structure hasn't changed — e.g. adding a payment.
   const refreshSupabase = useCallback(async () => {
+    if (isDemo) return
     const [ouResp, apptResp, coResp, cnResp, prResp] = await Promise.all([
       supabase.from('owner_use').select('*'),
       supabase.from('appointments').select('*'),
@@ -192,11 +213,15 @@ export default function App() {
       >
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 leading-tight">Cahoon</h1>
-            <p className="text-xs text-gray-400 leading-tight">Rental Property Manager</p>
+            <h1 className="text-xl font-bold text-gray-900 leading-tight">
+              {isDemo ? 'Cape Rental' : 'Cahoon'}
+            </h1>
+            <p className="text-xs text-gray-400 leading-tight">
+              {isDemo ? '42 Dune Road, Wellfleet MA' : 'Rental Property Manager'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            {isAdmin && (
+            {isAdmin && !isDemo && (
               <button
                 onClick={() => setShowICSImport(true)}
                 className="text-sm text-gray-500 font-medium hover:text-gray-700"
@@ -211,7 +236,7 @@ export default function App() {
             >
               {loading ? 'Loading…' : 'Refresh'}
             </button>
-            {isAdmin && (
+            {isAdmin && !isDemo && (
               <button
                 onClick={() => setShowSettings(true)}
                 className="text-xl text-gray-400 hover:text-gray-700 transition-colors leading-none"
@@ -222,6 +247,18 @@ export default function App() {
             )}
           </div>
         </div>
+        {isDemo && (
+          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
+            📋 Demo Mode — Contact Jose at{' '}
+            <a
+              href="mailto:ocean.heart.cleaning@gmail.com"
+              className="font-semibold underline underline-offset-2 hover:text-amber-900"
+            >
+              ocean.heart.cleaning@gmail.com
+            </a>
+            {' '}to get started
+          </div>
+        )}
       </header>
 
       {/* Content */}
@@ -241,7 +278,7 @@ export default function App() {
           </div>
         )}
 
-        {isAdmin && visibleReminders.length > 0 && (
+        {isAdmin && !isDemo && visibleReminders.length > 0 && (
           <div className="space-y-2 mb-4">
             {visibleReminders.map((r, i) => (
               <ReminderBanner
@@ -302,6 +339,8 @@ export default function App() {
                 isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
+                isDemo={isDemo}
+                onDemoWrite={showDemoToast}
               />
             ) : selectedIsRenter ? (
               <RenterModal
@@ -313,6 +352,8 @@ export default function App() {
                 onClose={onClose}
                 onRefresh={handleRefreshKeepOpen}
                 onFullRefresh={handleRefresh}
+                isDemo={isDemo}
+                onDemoWrite={showDemoToast}
               />
             ) : selectedIsOwner ? (
               <OwnerUseModal
@@ -323,6 +364,8 @@ export default function App() {
                 isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefresh}
+                isDemo={isDemo}
+                onDemoWrite={showDemoToast}
               />
             ) : (
               <VacantModal
@@ -332,6 +375,8 @@ export default function App() {
                 isAdmin={isAdmin}
                 onClose={onClose}
                 onRefresh={handleRefresh}
+                isDemo={isDemo}
+                onDemoWrite={showDemoToast}
               />
             )
           }
@@ -345,6 +390,13 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           onDataRefresh={loadData}
         />
+      )}
+
+      {/* Demo write toast */}
+      {demoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white text-sm px-5 py-2.5 rounded-full shadow-lg pointer-events-none whitespace-nowrap">
+          Demo mode — changes are not saved
+        </div>
       )}
     </div>
   )

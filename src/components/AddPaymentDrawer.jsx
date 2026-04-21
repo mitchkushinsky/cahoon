@@ -11,7 +11,7 @@ function todayISO() {
   return `${y}-${m}-${day}`
 }
 
-export default function AddPaymentDrawer({ renterKey, milestone, milestoneNumber, onSave, onClose }) {
+export default function AddPaymentDrawer({ renterKey, milestone, milestoneNumber, onSave, onClose, isDemo, onDemoWrite }) {
   const [amount, setAmount] = useState(String(milestone.amountOwed || ''))
   const [date, setDate] = useState(todayISO())
   const [method, setMethod] = useState(METHODS[0])
@@ -21,6 +21,7 @@ export default function AddPaymentDrawer({ renterKey, milestone, milestoneNumber
   const save = async () => {
     const amt = parseFloat(amount)
     if (!amt || isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return }
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     setError(null)
     const { error: err } = await supabase.from('payment_records').upsert(

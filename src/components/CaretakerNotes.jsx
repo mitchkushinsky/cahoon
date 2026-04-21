@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toISODate } from '../lib/parseCSV'
 
-export default function CaretakerNotes({ weekStart, caretakerNote, isAdmin, onRefresh }) {
+export default function CaretakerNotes({ weekStart, caretakerNote, isAdmin, onRefresh, isDemo, onDemoWrite }) {
   const existing = caretakerNote?.note || ''
   const [text, setText] = useState(existing)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const save = async () => {
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     await supabase.from('caretaker_notes').upsert(
       { week_start: toISODate(weekStart), note: text.trim() || null, updated_at: new Date().toISOString() },

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { toISODate } from '../lib/parseCSV'
 
-export default function AppointmentForm({ weekStart, onSaved, onCancel }) {
+export default function AppointmentForm({ weekStart, onSaved, onCancel, isDemo, onDemoWrite }) {
   const [type, setType] = useState('cleaning')
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(toISODate(weekStart) || '')
@@ -11,6 +11,7 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel }) {
 
   const handleSave = async () => {
     if (!title.trim() || !date) return
+    if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     const { error } = await supabase.from('appointments').insert({
       week_start: toISODate(weekStart),

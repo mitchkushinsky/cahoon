@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import AppointmentForm from './AppointmentForm'
 
-export default function AppointmentList({ appointments, weekStart, onRefresh, isAdmin = true }) {
+export default function AppointmentList({ appointments, weekStart, onRefresh, isAdmin = true, isDemo, onDemoWrite }) {
   const [adding, setAdding] = useState(false)
 
   const handleDelete = async (id) => {
+    if (isDemo) { onDemoWrite(); return }
     await supabase.from('appointments').delete().eq('id', id)
     onRefresh()
   }
@@ -54,6 +55,8 @@ export default function AppointmentList({ appointments, weekStart, onRefresh, is
           weekStart={weekStart}
           onSaved={() => { setAdding(false); onRefresh() }}
           onCancel={() => setAdding(false)}
+          isDemo={isDemo}
+          onDemoWrite={onDemoWrite}
         />
       )}
     </div>
