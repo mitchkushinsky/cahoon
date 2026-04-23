@@ -1,6 +1,8 @@
 // Compute active reminder banners from the full list of week slots.
 // Returns an array of reminder objects sorted by urgency (daysUntil asc).
 
+import { computePayment } from './paymentLogic'
+
 // DEV ONLY — set to a date string to test reminders, e.g. '2026-04-22'
 // Set to null before deploying
 const DEV_DATE_OVERRIDE = null
@@ -210,24 +212,39 @@ export function computeReminders(weeks) {
     const leaseEnd   = renterInfo?.dates?.end   || entry.endDate
 
     // FINAL_PAYMENT_REMINDER
-    if (finalOwed > 0 && !(finalActual?.amount > 0) && leaseStart) {
-      const finalDueDate = new Date(leaseStart.getTime() - 30 * DAY_MS)
-      const days = daysUntil(finalDueDate, todayMidnight)
+    if (leaseStart) {
+      const computed = computePayment(entry, todayMidnight)
+      const finalMilestone = computed.milestones[2]
 
-      if (days >= 0 && days <= 2) {
-        const body = renderPlain(mergeTemplate(FINAL_PAYMENT_TEMPLATE, {
-          Name: firstName(name),
-          Payment3Amount: fmt(finalOwed),
-        }))
-        reminders.push({
-          type: 'FINAL_PAYMENT',
-          reminderKey: `FINAL_PAYMENT_${isoDate(leaseStart)}`,
-          renterName: name,
-          email,
-          message: `${name}'s final payment of ${fmt(finalOwed)} is due in ${days} day${days === 1 ? '' : 's'}. Send reminder?`,
-          mailtoUrl: buildMailto(email, 'Cahoon - Final Payment Reminder', body),
-          daysUntil: days,
-        })
+      // Credit from overpayments on milestones 1+2 that flows into final payment
+      const depositOwed  = entry.depositOwed  || 0
+      const payment2Owed = entry.payment2Owed || 0
+      const paid1 = entry.depositActual?.amount  || 0
+      const paid2 = entry.payment2Actual?.amount || 0
+      const credit2 = Math.max(0, paid1 + paid2 - depositOwed - payment2Owed)
+      const netFinalOwed = Math.max(0, finalMilestone.amountOwed - credit2)
+      const paid3 = finalMilestone.actual?.amount || 0
+
+      if (netFinalOwed > 0 && paid3 < netFinalOwed) {
+        const finalDueDate = new Date(leaseStart.getTime() - 30 * DAY_MS)
+        const days = daysUntil(finalDueDate, todayMidnight)
+
+        if (days >= 0 && days <= 2) {
+          const amountDue = netFinalOwed - paid3
+          const body = renderPlain(mergeTemplate(FINAL_PAYMENT_TEMPLATE, {
+            Name: firstName(name),
+            Payment3Amount: fmt(amountDue),
+          }))
+          reminders.push({
+            type: 'FINAL_PAYMENT',
+            reminderKey: `FINAL_PAYMENT_${isoDate(leaseStart)}`,
+            renterName: name,
+            email,
+            message: `${name}'s final payment of ${fmt(amountDue)} is due in ${days} day${days === 1 ? '' : 's'}. Send reminder?`,
+            mailtoUrl: buildMailto(email, 'Cahoon - Final Payment Reminder', body),
+            daysUntil: days,
+          })
+        }
       }
     }
 
@@ -235,6 +252,10 @@ export function computeReminders(weeks) {
     if (leaseStart) {
       const days = daysUntil(leaseStart, todayMidnight)
       if (days >= 0 && days <= 7) {
+        const computed = computePayment(entry, todayMidnight)
+        const outstandingBalance = Math.max(0, (entry.totalRent || 0) - computed.totalPaid)
+        const balanceNote = outstandingBalance > 0 ? ` · ${fmt(outstandingBalance)} balance outstanding` : ''
+
         const mergeFields = {
           Name: firstName(name),
           LeaseStartDate: fmtLongDate(leaseStart),
@@ -246,7 +267,7 @@ export function computeReminders(weeks) {
           reminderKey: `WELCOME_${isoDate(leaseStart)}`,
           renterName: name,
           email,
-          message: `${name} arrives in ${days} day${days === 1 ? '' : 's'}. Send welcome email?`,
+          message: `${name} arrives in ${days} day${days === 1 ? '' : 's'}. Send welcome email?${balanceNote}`,
           emailSubject: 'Welcome to 1105 Cahoon Hollow Road!',
           emailTemplate: WELCOME_EMAIL_TEMPLATE,
           mergeFields,
