@@ -17,6 +17,7 @@ import WelcomeEmailModal from './components/WelcomeEmailModal'
 import ICSImportModal from './components/ICSImportModal'
 import SettingsScreen from './components/SettingsScreen'
 import HelpScreen from './components/HelpScreen'
+import FinancialsScreen from './components/FinancialsScreen'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -43,9 +44,12 @@ export default function App() {
   const [sessionDismissed, setSessionDismissed] = useState([])
   const [permanentDismissals, setPermanentDismissals] = useState([])
   const [previewReminder, setPreviewReminder] = useState(null)
+  const [expenses, setExpenses] = useState([])
+  const [taxPayments, setTaxPayments] = useState([])
   const [showICSImport, setShowICSImport] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [showFinancials, setShowFinancials] = useState(false)
   const [demoToast, setDemoToast] = useState(false)
 
   const showDemoToast = useCallback(() => {
@@ -69,7 +73,7 @@ export default function App() {
     }
     try {
       if (USE_SUPABASE_RENTALS) {
-        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp] =
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp] =
           await Promise.all([
             supabase.from('rentals').select('*'),
             supabase.from('renters').select('*'),
@@ -79,6 +83,8 @@ export default function App() {
             supabase.from('caretaker_notes').select('*'),
             supabase.from('payment_records').select('*'),
             supabase.from('reminder_dismissals').select('reminder_key'),
+            supabase.from('expenses').select('*').order('date'),
+            supabase.from('occupancy_tax_payments').select('*'),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
@@ -94,9 +100,11 @@ export default function App() {
         setCaretakerNotes(cnResp.data || [])
         setPaymentRecords(prResp.data || [])
         setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
+        setExpenses(expResp.data || [])
+        setTaxPayments(taxResp.data || [])
       } else {
         // CSV fallback path
-        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp] = await Promise.all([
+        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp] = await Promise.all([
           fetch(CSV_URL).then(r => {
             if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
             return r.text()
@@ -107,6 +115,8 @@ export default function App() {
           supabase.from('caretaker_notes').select('*'),
           supabase.from('payment_records').select('*'),
           supabase.from('reminder_dismissals').select('reminder_key'),
+          supabase.from('expenses').select('*').order('date'),
+          supabase.from('occupancy_tax_payments').select('*'),
         ])
 
         const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
@@ -123,6 +133,8 @@ export default function App() {
         setCaretakerNotes(cnResp.data || [])
         setPaymentRecords(freshPR || [])
         setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
+        setExpenses(expResp.data || [])
+        setTaxPayments(taxResp.data || [])
       }
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
@@ -164,6 +176,16 @@ export default function App() {
   // Ancillary-only refresh, keeps modal open. Used for payment/note updates.
   const handleRefreshKeepOpen = () => refreshSupabase()
 
+  const refreshFinancials = useCallback(async () => {
+    if (isDemo) return
+    const [expResp, taxResp] = await Promise.all([
+      supabase.from('expenses').select('*').order('date'),
+      supabase.from('occupancy_tax_payments').select('*'),
+    ])
+    setExpenses(expResp.data || [])
+    setTaxPayments(taxResp.data || [])
+  }, [])
+
   // Merge Supabase payment records into weeks (Supabase takes precedence over embedded data)
   const resolvedWeeks = resolveWeeksPayments(weeks, paymentRecords)
 
@@ -171,7 +193,7 @@ export default function App() {
     ? resolvedWeeks.find(w => w.weekKey === selected.weekKey) ?? selected
     : null
 
-  const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks) : []
+  const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks, taxPayments) : []
   const visibleReminders = allReminders.filter(r =>
     !sessionDismissed.includes(r.reminderKey) &&
     !permanentDismissals.includes(r.reminderKey)
@@ -223,6 +245,14 @@ export default function App() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {isAdmin && !isDemo && (
+              <button
+                onClick={() => setShowFinancials(true)}
+                className="text-sm text-gray-500 font-medium hover:text-gray-700"
+              >
+                Financials
+              </button>
+            )}
             {isAdmin && !isDemo && (
               <button
                 onClick={() => setShowICSImport(true)}
@@ -398,6 +428,17 @@ export default function App() {
           csvUrl={CSV_URL}
           onClose={() => setShowSettings(false)}
           onDataRefresh={loadData}
+        />
+      )}
+
+      {/* Financials screen — slides in from right */}
+      {showFinancials && (
+        <FinancialsScreen
+          onClose={() => setShowFinancials(false)}
+          weeks={resolvedWeeks}
+          expenses={expenses}
+          taxPayments={taxPayments}
+          onRefreshFinancials={refreshFinancials}
         />
       )}
 

@@ -195,12 +195,42 @@ export default function HelpScreen({ onClose, isAdmin }) {
           )}
 
           {isAdmin && (
+            <Section icon="💰" title="Financials">
+              <P>Tap <B>Financials</B> in the header to open the financial dashboard. Use the year selector to switch between seasons.</P>
+
+              <Sub>Expenses tab</Sub>
+              <div className="space-y-1">
+                <Row icon="•">Track all property expenses by date, description, and category</Row>
+                <Row icon="•">Categories: Cleaning, Repairs, Utilities, Insurance, Supplies, Taxes, Other</Row>
+                <Row icon="+"><span>Tap <B>+ Add</B> to enter an expense manually</span></Row>
+                <Row icon="•"><span>Tap <B>Import CSV</B> to bulk-import from a spreadsheet. Required columns: <Code>date</Code>, <Code>amount</Code>. Optional: <Code>description</Code>, <Code>category</Code>. Duplicate rows are skipped.</span></Row>
+              </div>
+
+              <Sub>Occupancy Tax tab</Sub>
+              <div className="space-y-1">
+                <Row icon="•">Shows tax owed for each month that has a rental ending in it</Row>
+                <Row icon="•">Tax = gross rent − (gross rent ÷ 1.1445), per MA short-term rental rules</Row>
+                <Row icon="•">Tap <B>Details</B> to see a per-renter breakdown for a month</Row>
+                <Row icon="•">Tap <B>Record Payment</B> to log when you paid the tax (amount, date, notes)</Row>
+              </div>
+
+              <Sub>Year-End Report tab</Sub>
+              <div className="space-y-1">
+                <Row icon="•">Summary of total rental income, occupancy tax, and expenses by category</Row>
+                <Row icon="•">Net income = Income − Tax − Expenses</Row>
+                <Row icon="•">Tap <B>Export CSV</B> to download for your accountant</Row>
+              </div>
+            </Section>
+          )}
+
+          {isAdmin && (
             <Section icon="🔔" title="Reminders">
               <P>Reminder banners appear at the top of the calendar when action is needed:</P>
               <div className="space-y-1 mt-1">
                 <Row icon="•"><span><B>Final payment due</B> — fires 2 days before the 30-day deadline</span></Row>
                 <Row icon="•"><span><B>Welcome email</B> — fires 7 days before a renter's arrival</span></Row>
                 <Row icon="•"><span><B>Jan 15 payment</B> — fires Jan 13–14 for renters with outstanding second payments</span></Row>
+                <Row icon="•"><span><B>Occupancy tax due</B> — fires in the last 5 days of a rental month when tax hasn't been recorded as paid</span></Row>
               </div>
 
               <Sub>Each banner has</Sub>

@@ -133,7 +133,19 @@ function firstName(fullName) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function computeReminders(weeks) {
+const TAX_DIVISOR = 1.1445
+
+function taxForEntry(entry) {
+  const rent = entry.totalRent || 0
+  return rent - rent / TAX_DIVISOR
+}
+
+function monthKeyLabel(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+export function computeReminders(weeks, taxPayments = []) {
   const today = DEV_DATE_OVERRIDE
     ? new Date(DEV_DATE_OVERRIDE + 'T12:00:00')
     : new Date()
@@ -274,6 +286,40 @@ export function computeReminders(weeks) {
           daysUntil: days,
         })
       }
+    }
+  }
+
+  // ── OCCUPANCY_TAX REMINDER ────────────────────────────────────────────────────
+  // Group unique entries by month of rental end date
+  const taxMonths = {}
+  for (const entry of unique) {
+    const endDate = entry.renterInfo?.dates?.end || entry.endDate
+    if (!endDate) continue
+    const d = endDate instanceof Date ? endDate : new Date(endDate)
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (!taxMonths[monthKey]) taxMonths[monthKey] = []
+    taxMonths[monthKey].push(entry)
+  }
+
+  for (const [monthKey, monthEntries] of Object.entries(taxMonths)) {
+    const totalTax = monthEntries.reduce((s, e) => s + taxForEntry(e), 0)
+    if (totalTax <= 0) continue
+
+    // Skip if payment already recorded
+    const payment = taxPayments.find(p => p.period_month === monthKey + '-01')
+    if (payment?.amount_paid > 0) continue
+
+    // Fire within 5 days of month-end (daysUntil 0–5, i.e. today through 5 days before)
+    const [y, m] = monthKey.split('-').map(Number)
+    const lastDay = new Date(y, m, 0) // last day of the month
+    const daysToEnd = daysUntil(lastDay, todayMidnight)
+    if (daysToEnd >= 0 && daysToEnd <= 5) {
+      reminders.push({
+        type: 'OCCUPANCY_TAX',
+        reminderKey: `OCCUPANCY_TAX_${monthKey}`,
+        message: `Occupancy tax of ${fmt(totalTax)} for ${monthKeyLabel(monthKey)} due ${daysToEnd === 0 ? 'today' : `in ${daysToEnd} day${daysToEnd === 1 ? '' : 's'}`}`,
+        daysUntil: daysToEnd,
+      })
     }
   }
 

@@ -2,8 +2,9 @@ import { useState } from 'react'
 
 export default function ReminderBanner({ reminder, onSessionDismiss, onPermanentDismiss, onPreview }) {
   const [marking, setMarking] = useState(false)
-  const isJan15   = reminder.type === 'JAN_15'
-  const isWelcome = reminder.type === 'WELCOME'
+  const isJan15      = reminder.type === 'JAN_15'
+  const isWelcome    = reminder.type === 'WELCOME'
+  const isTax        = reminder.type === 'OCCUPANCY_TAX'
 
   const handleMarkSent = async () => {
     setMarking(true)
@@ -19,7 +20,7 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
           {/* Email action */}
-          {isWelcome ? (
+          {isTax ? null : isWelcome ? (
             <button
               onClick={() => onPreview(reminder)}
               className="text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
