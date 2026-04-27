@@ -64,6 +64,18 @@ Please:
 Thanks,
 Mitch Kushinsky`
 
+const MOSQUITO_TEMPLATE = `Hi <Name>,
+
+I just wanted to let you know that on <TreatmentDate>, the property is scheduled for a tick and mosquito barrier treatment.
+
+The treatment is non-toxic to people, pets and wildlife.
+
+Prior to a treatment we recommend to keep pets and family indoors during, and ten to twenty minutes after a treatment. This simply allows the product enough time to dry, which increases the effectiveness of the product.
+
+If you have any questions, please reach out to me or Jose.
+
+Enjoy your stay.`
+
 export const WELCOME_EMAIL_TEMPLATE = `Hi <Name>,
 
 I hope you'll have a great week at 1105 Cahoon Hollow Road.
@@ -145,7 +157,7 @@ function monthKeyLabel(monthKey) {
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-export function computeReminders(weeks, taxPayments = []) {
+export function computeReminders(weeks, taxPayments = [], appointments = []) {
   const today = DEV_DATE_OVERRIDE
     ? new Date(DEV_DATE_OVERRIDE + 'T12:00:00')
     : new Date()
@@ -321,6 +333,48 @@ export function computeReminders(weeks, taxPayments = []) {
         daysUntil: daysToEnd,
       })
     }
+  }
+
+  // ── MOSQUITO_TREATMENT REMINDER ──────────────────────────────────────────────
+  for (const appt of appointments) {
+    const isMatch =
+      (appt.title && /cape cod mosquito squad/i.test(appt.title)) ||
+      appt.type === 'exterminator'
+    if (!isMatch) continue
+
+    const apptDate = appt.date ? new Date(appt.date + 'T00:00:00') : null
+    if (!apptDate) continue
+    if (apptDate < todayMidnight) continue
+
+    const hoursUntil = (apptDate.getTime() - today.getTime()) / (1000 * 60 * 60)
+    if (hoursUntil > 24) continue
+
+    const renter = unique.find(entry => {
+      const start = entry.renterInfo?.dates?.start || entry.startDate
+      const end   = entry.renterInfo?.dates?.end   || entry.endDate
+      if (!start || !end) return false
+      return start <= apptDate && apptDate <= end
+    })
+    if (!renter) continue
+
+    const treatmentDate = fmtLongDate(apptDate)
+    const name = firstName(renter.name)
+    const subject = 'Upcoming Mosquito Treatment at 1105 Cahoon Hollow Road'
+    const body = mergeTemplate(MOSQUITO_TEMPLATE, { Name: name, TreatmentDate: treatmentDate })
+
+    reminders.push({
+      type: 'MOSQUITO_TREATMENT',
+      renterName: renter.name,
+      email: renter.email,
+      appointmentDate: apptDate,
+      message: `${renter.name} is at the house. Mosquito treatment scheduled for ${treatmentDate}. Send notification email?`,
+      emailSubject: subject,
+      emailTemplate: MOSQUITO_TEMPLATE,
+      mergeFields: { name, treatmentDate },
+      mailtoUrl: buildMailto(renter.email, subject, body),
+      daysUntil: hoursUntil / 24,
+      reminderKey: `MOSQUITO_${appt.id}`,
+    })
   }
 
   // Sort by urgency

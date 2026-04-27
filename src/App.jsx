@@ -193,7 +193,7 @@ export default function App() {
     ? resolvedWeeks.find(w => w.weekKey === selected.weekKey) ?? selected
     : null
 
-  const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks, taxPayments) : []
+  const allReminders = resolvedWeeks.length > 0 ? computeReminders(resolvedWeeks, taxPayments, appointments) : []
   const visibleReminders = allReminders.filter(r =>
     !sessionDismissed.includes(r.reminderKey) &&
     !permanentDismissals.includes(r.reminderKey)

@@ -180,8 +180,8 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
       rows.push(row)
     }
     if (rows.length === 0) { setCsvError('No valid rows found in CSV.'); return }
-    const existing = new Set(expenses.map(e => `${e.date}|${e.description}|${e.amount}`))
-    const toInsert = rows.filter(r => !existing.has(`${r.date}|${r.description}|${r.amount}`))
+    const existing = new Set(expenses.map(e => `${e.date}|${e.paid_to}|${e.amount}`))
+    const toInsert = rows.filter(r => !existing.has(`${r.date}|${r.paid_to}|${r.amount}`))
     if (toInsert.length === 0) {
       setCsvError('No new expenses to import — all rows already exist.')
       e.target.value = ''

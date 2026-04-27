@@ -231,6 +231,7 @@ export default function HelpScreen({ onClose, isAdmin }) {
                 <Row icon="•"><span><B>Welcome email</B> — fires 7 days before a renter's arrival</span></Row>
                 <Row icon="•"><span><B>Jan 15 payment</B> — fires Jan 13–14 for renters with outstanding second payments</span></Row>
                 <Row icon="•"><span><B>Occupancy tax due</B> — fires in the last 5 days of a rental month when tax hasn't been recorded as paid</span></Row>
+                <Row icon="🦟"><span><B>Mosquito Treatment</B> — fires 24 hours before a scheduled exterminator appointment if a renter is currently in the house. If added less than 24 hours before, fires immediately. No email is sent if the house is vacant.</span></Row>
               </div>
 
               <Sub>Each banner has</Sub>

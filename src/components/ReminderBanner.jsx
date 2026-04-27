@@ -5,6 +5,7 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
   const isJan15      = reminder.type === 'JAN_15'
   const isWelcome    = reminder.type === 'WELCOME'
   const isTax        = reminder.type === 'OCCUPANCY_TAX'
+  const isMosquito   = reminder.type === 'MOSQUITO_TREATMENT'
 
   const handleMarkSent = async () => {
     setMarking(true)
@@ -13,7 +14,7 @@ export default function ReminderBanner({ reminder, onSessionDismiss, onPermanent
 
   return (
     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm">
-      <span className="flex-shrink-0 text-base">⚠️</span>
+      <span className="flex-shrink-0 text-base">{isMosquito ? '🦟' : '⚠️'}</span>
 
       <div className="flex-1 min-w-0">
         <p className="text-amber-800 font-medium leading-snug">{reminder.message}</p>
