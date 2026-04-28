@@ -101,7 +101,7 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
   const hasComment        = !!(commentOverride?.comment ?? comment)
   const hasCaretakerNote  = !!(caretakerNote?.note)
 
-  const apptIcon = (type) => type === 'cleaning' ? '🧹' : type === 'exterminator' ? '🦟' : '🔨'
+  const apptIcon = (type) => type === 'cleaning' ? '🧹' : type === 'exterminator' ? '🦟' : type === 'other' ? '📌' : '🔨'
   const fmtApptDate = (dateStr) => {
     const [y, m, d] = dateStr.split('-').map(Number)
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })

@@ -6,6 +6,7 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel, isDemo, 
   const [type, setType] = useState('cleaning')
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(toISODate(weekStart) || '')
+  const [timeWindow, setTimeWindow] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -18,6 +19,7 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel, isDemo, 
       type,
       title: title.trim(),
       date,
+      time_window: timeWindow.trim() || null,
       notes: notes.trim() || null,
     })
     setSaving(false)
@@ -31,6 +33,7 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel, isDemo, 
           { value: 'cleaning',     label: '🧹 Cleaning' },
           { value: 'repair',       label: '🔨 Repair' },
           { value: 'exterminator', label: '🦟 Exterminator' },
+          { value: 'other',        label: '📌 Other' },
         ].map(({ value, label }) => (
           <button
             key={value}
@@ -58,6 +61,14 @@ export default function AppointmentForm({ weekStart, onSaved, onCancel, isDemo, 
         type="date"
         value={date}
         onChange={e => setDate(e.target.value)}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+      />
+
+      <input
+        type="text"
+        placeholder="Time / Arrival Window (optional) — e.g. 9:00 AM – 11:00 AM"
+        value={timeWindow}
+        onChange={e => setTimeWindow(e.target.value)}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
       />
 
