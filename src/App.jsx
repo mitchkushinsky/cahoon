@@ -87,6 +87,8 @@ export default function App() {
             supabase.from('occupancy_tax_payments').select('*'),
           ])
 
+        console.log('[App] apptResp from Supabase:', apptResp)
+        console.log('[App] appointments passed to buildSupabaseCalendar:', apptResp.data)
         const parsedWeeks = buildSupabaseCalendar(
           rentalsResp.data || [],
           rentersResp.data || [],

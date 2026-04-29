@@ -148,6 +148,9 @@ export function buildCalendar(entries, appointments = []) {
     .map(a => { const [y,m,d] = a.date.split('-').map(Number); return new Date(y, m-1, d) })
     .filter(d => !isNaN(d.getTime()))
 
+  console.log('[buildCalendar] appointments passed in:', appointments)
+  console.log('[buildCalendar] minDate from rentals only:', new Date(Math.min(...valid.map(e => e.startDate.getTime()))).toISOString().slice(0,10))
+
   const allStartMs = [
     ...valid.map(e => e.startDate.getTime()),
     ...apptDates.map(d => d.getTime()),
@@ -159,6 +162,9 @@ export function buildCalendar(entries, appointments = []) {
   const minStart  = new Date(Math.min(...allStartMs))
   const maxEnd    = new Date(Math.max(...allEndMs))
   const seasonEnd = prevSunday(new Date(maxEnd.getTime() + 7 * 24 * 60 * 60 * 1000))
+
+  console.log('[buildCalendar] minDate after including appointments:', minStart.toISOString().slice(0,10))
+  console.log('[buildCalendar] seasonStart (first Sunday):', prevSunday(minStart).toISOString().slice(0,10))
 
   // Generate every Sunday from prevSunday(minStart) through seasonEnd (one week past maxEnd)
   const slots = []
