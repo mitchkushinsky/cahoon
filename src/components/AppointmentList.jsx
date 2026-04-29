@@ -21,10 +21,14 @@ function AppointmentEditForm({ appt, onSaved, onCancel, isDemo, onDemoWrite }) {
     if (!title.trim() || !date) return
     if (isDemo) { onDemoWrite(); return }
     setSaving(true)
+    const d = new Date(date + 'T00:00:00')
+    d.setDate(d.getDate() - d.getDay())
+    const week_start = d.toISOString().slice(0, 10)
     await supabase.from('appointments').update({
       type,
       title: title.trim(),
       date,
+      week_start,
       time_window: timeWindow.trim() || null,
       notes: notes.trim() || null,
     }).eq('id', appt.id)
