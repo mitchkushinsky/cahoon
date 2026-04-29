@@ -152,13 +152,18 @@ export function buildCalendar(entries, appointments = []) {
     ...valid.map(e => e.startDate.getTime()),
     ...apptDates.map(d => d.getTime()),
   ]
-  const minStart = new Date(Math.min(...allStartMs))
-  const maxEnd   = new Date(Math.max(...valid.map(e => e.endDate.getTime())))
+  const allEndMs = [
+    ...valid.map(e => e.endDate.getTime()),
+    ...apptDates.map(d => d.getTime()),
+  ]
+  const minStart  = new Date(Math.min(...allStartMs))
+  const maxEnd    = new Date(Math.max(...allEndMs))
+  const seasonEnd = prevSunday(new Date(maxEnd.getTime() + 7 * 24 * 60 * 60 * 1000))
 
-  // Generate every Sunday from prevSunday(minStart) through prevSunday(maxEnd)
+  // Generate every Sunday from prevSunday(minStart) through seasonEnd (one week past maxEnd)
   const slots = []
   const cursor = prevSunday(minStart)
-  while (cursor <= maxEnd) {
+  while (cursor <= seasonEnd) {
     slots.push(new Date(cursor))
     cursor.setDate(cursor.getDate() + 7)
   }
