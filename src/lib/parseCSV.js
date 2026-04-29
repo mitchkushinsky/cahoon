@@ -144,11 +144,17 @@ export function buildCalendar(entries, appointments = []) {
 
   // Factor in appointment dates so weeks before the first rental
   // but with appointments are included in the calendar.
+  console.log('[buildCalendar] appointments passed in:', appointments)
   const apptDates = appointments
-    .map(a => { const [y,m,d] = a.date.split('-').map(Number); return new Date(y, m-1, d) })
+    .map(a => {
+      const dateStr = String(a.date || '').slice(0, 10) // guard against timestamp strings
+      const [y, m, d] = dateStr.split('-').map(Number)
+      const parsed = new Date(y, m - 1, d)
+      console.log('[buildCalendar] appointment date raw:', a.date, '→ parsed:', isNaN(parsed.getTime()) ? 'INVALID' : dateStr)
+      return parsed
+    })
     .filter(d => !isNaN(d.getTime()))
 
-  console.log('[buildCalendar] appointments passed in:', appointments)
   console.log('[buildCalendar] minDate from rentals only:', new Date(Math.min(...valid.map(e => e.startDate.getTime()))).toISOString().slice(0,10))
 
   const allStartMs = [
