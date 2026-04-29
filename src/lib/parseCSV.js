@@ -144,18 +144,13 @@ export function buildCalendar(entries, appointments = []) {
 
   // Factor in appointment dates so weeks before the first rental
   // but with appointments are included in the calendar.
-  console.log('[buildCalendar] appointments passed in:', appointments)
   const apptDates = appointments
     .map(a => {
       const dateStr = String(a.date || '').slice(0, 10) // guard against timestamp strings
       const [y, m, d] = dateStr.split('-').map(Number)
-      const parsed = new Date(y, m - 1, d)
-      console.log('[buildCalendar] appointment date raw:', a.date, '→ parsed:', isNaN(parsed.getTime()) ? 'INVALID' : dateStr)
-      return parsed
+      return new Date(y, m - 1, d)
     })
     .filter(d => !isNaN(d.getTime()))
-
-  console.log('[buildCalendar] minDate from rentals only:', new Date(Math.min(...valid.map(e => e.startDate.getTime()))).toISOString().slice(0,10))
 
   const allStartMs = [
     ...valid.map(e => e.startDate.getTime()),
@@ -168,9 +163,6 @@ export function buildCalendar(entries, appointments = []) {
   const minStart  = new Date(Math.min(...allStartMs))
   const maxEnd    = new Date(Math.max(...allEndMs))
   const seasonEnd = prevSunday(new Date(maxEnd.getTime() + 7 * 24 * 60 * 60 * 1000))
-
-  console.log('[buildCalendar] minDate after including appointments:', minStart.toISOString().slice(0,10))
-  console.log('[buildCalendar] seasonStart (first Sunday):', prevSunday(minStart).toISOString().slice(0,10))
 
   // Generate every Sunday from prevSunday(minStart) through seasonEnd (one week past maxEnd)
   const slots = []
