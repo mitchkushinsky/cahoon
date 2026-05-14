@@ -17,6 +17,7 @@ import WelcomeEmailModal from './components/WelcomeEmailModal'
 import ICSImportModal from './components/ICSImportModal'
 import SettingsScreen from './components/SettingsScreen'
 import HelpScreen from './components/HelpScreen'
+import TaskList from './components/TaskList'
 import FinancialsScreen from './components/FinancialsScreen'
 
 const CSV_URL =
@@ -51,6 +52,8 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [showFinancials, setShowFinancials] = useState(false)
   const [demoToast, setDemoToast] = useState(false)
+  const [tasks, setTasks] = useState([])
+  const [completedTasks, setCompletedTasks] = useState([])
 
   const showDemoToast = useCallback(() => {
     setDemoToast(true)
@@ -73,7 +76,7 @@ export default function App() {
     }
     try {
       if (USE_SUPABASE_RENTALS) {
-        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp] =
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp] =
           await Promise.all([
             supabase.from('rentals').select('*'),
             supabase.from('renters').select('*'),
@@ -85,6 +88,8 @@ export default function App() {
             supabase.from('reminder_dismissals').select('reminder_key'),
             supabase.from('expenses').select('*').order('date'),
             supabase.from('occupancy_tax_payments').select('*'),
+            supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
+            supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
@@ -102,9 +107,11 @@ export default function App() {
         setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
         setExpenses(expResp.data || [])
         setTaxPayments(taxResp.data || [])
+        setTasks(tasksResp.data || [])
+        setCompletedTasks(completedTasksResp.data || [])
       } else {
         // CSV fallback path
-        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp] = await Promise.all([
+        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp] = await Promise.all([
           fetch(CSV_URL).then(r => {
             if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
             return r.text()
@@ -117,6 +124,8 @@ export default function App() {
           supabase.from('reminder_dismissals').select('reminder_key'),
           supabase.from('expenses').select('*').order('date'),
           supabase.from('occupancy_tax_payments').select('*'),
+          supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
+          supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
         ])
 
         const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
@@ -135,6 +144,8 @@ export default function App() {
         setPermanentDismissals((rdResp.data || []).map(r => r.reminder_key))
         setExpenses(expResp.data || [])
         setTaxPayments(taxResp.data || [])
+        setTasks(tasksResp.data || [])
+        setCompletedTasks(completedTasksResp.data || [])
       }
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
@@ -149,18 +160,22 @@ export default function App() {
   // Used when the calendar structure hasn't changed — e.g. adding a payment.
   const refreshSupabase = useCallback(async () => {
     if (isDemo) return
-    const [ouResp, apptResp, coResp, cnResp, prResp] = await Promise.all([
+    const [ouResp, apptResp, coResp, cnResp, prResp, tasksResp, completedTasksResp] = await Promise.all([
       supabase.from('owner_use').select('*'),
       supabase.from('appointments').select('*'),
       supabase.from('comment_overrides').select('*'),
       supabase.from('caretaker_notes').select('*'),
       supabase.from('payment_records').select('*'),
+      supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
+      supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
     ])
     setOwnerUse(ouResp.data || [])
     setAppointments(apptResp.data || [])
     setCommentOverrides(coResp.data || [])
     setCaretakerNotes(cnResp.data || [])
     setPaymentRecords(prResp.data || [])
+    setTasks(tasksResp.data || [])
+    setCompletedTasks(completedTasksResp.data || [])
   }, [])
 
   const getOwnerUseRow    = (weekStart) => ownerUse.find(r => r.week_start === toISODate(weekStart))
@@ -329,6 +344,10 @@ export default function App() {
               />
             ))}
           </div>
+        )}
+
+        {!isDemo && (
+          <TaskList tasks={tasks} completedTasks={completedTasks} isAdmin={isAdmin} onRefresh={loadData} />
         )}
 
         {resolvedWeeks.length > 0 && (

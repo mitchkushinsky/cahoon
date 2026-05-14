@@ -154,6 +154,16 @@ export default function HelpScreen({ onClose, isAdmin }) {
             </div>
           </Section>
 
+          <Section icon="✅" title="Tasks">
+            {isAdmin ? (
+              <>
+                <P>Add tasks for your caretaker using <B>+ Add Task</B>. Tasks appear at the top of the calendar in both your view and the caretaker's view. Set a due date to flag urgency.</P>
+              </>
+            ) : (
+              <P>Tasks from your property owner appear here. Tap the checkbox when complete — they'll disappear from your list.</P>
+            )}
+          </Section>
+
           <Section icon="📋" title="Appointments">
             <P>Appointments appear as icons on week cards (🧹 🔨 🦟) with the date.</P>
 
