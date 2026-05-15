@@ -90,6 +90,10 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
   const [csvError, setCsvError] = useState(null)
   const [csvSuccess, setCsvSuccess] = useState(null)
   const [form, setForm] = useState({ date: '', description: '', paid_to: '', amount: '', category: 'Utilities' })
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ date: '', description: '', paid_to: '', amount: '', category: 'Utilities' })
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
 
   // Months expanded state — current month open by default, past months closed
   const [expandedMonths, setExpandedMonths] = useState(() => new Set([currentMonthKey()]))
@@ -142,6 +146,41 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
       setExpandedMonths(prev => new Set([...prev, `${y}-${m}`]))
       onRefresh()
     }
+  }
+
+  function openEdit(exp) {
+    setEditingId(exp.id)
+    setEditForm({
+      date:        exp.date || '',
+      description: exp.description || '',
+      paid_to:     exp.paid_to || '',
+      amount:      String(exp.amount ?? ''),
+      category:    exp.category || 'Miscellaneous',
+    })
+    setEditError(null)
+    setDeleteId(null)
+  }
+
+  async function handleEditSave(id) {
+    if (!editForm.date || !editForm.amount) return
+    setEditSaving(true)
+    const { error } = await supabase.from('expenses').update({
+      date:        editForm.date,
+      description: editForm.description.trim() || null,
+      paid_to:     editForm.paid_to.trim() || null,
+      amount:      parseFloat(editForm.amount),
+      category:    editForm.category,
+    }).eq('id', id)
+    setEditSaving(false)
+    if (error) {
+      setEditError(error.code === '23505'
+        ? 'An expense with these details already exists.'
+        : error.message)
+      return
+    }
+    setEditingId(null)
+    setEditError(null)
+    onRefresh()
   }
 
   async function handleDelete(id) {
@@ -370,29 +409,101 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
                 {isOpen && (
                   <div className="border-t border-gray-100">
                     {monthExps.map(exp => (
-                      <div key={exp.id} className="flex items-start gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900 truncate">
-                            {exp.description || exp.paid_to || '(no description)'}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {fmtDate(exp.date)} · {exp.category}
-                            {exp.paid_to ? ` · ${exp.paid_to}` : ''}
-                          </p>
-                        </div>
-                        <span className="text-sm font-medium text-gray-800 shrink-0">{fmt(exp.amount)}</span>
-                        {deleteId === exp.id ? (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button onClick={() => handleDelete(exp.id)} className="text-xs text-red-600 font-medium">Delete</button>
-                            <button onClick={() => setDeleteId(null)} className="text-xs text-gray-400">Cancel</button>
+                      <div key={exp.id} className="border-b border-gray-50 last:border-b-0">
+                        {editingId === exp.id ? (
+                          <div className="px-4 py-3 bg-gray-50 space-y-2">
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={editForm.date}
+                                onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
+                                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="Amount"
+                                value={editForm.amount}
+                                onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
+                                className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Paid to"
+                              value={editForm.paid_to}
+                              onChange={e => setEditForm(f => ({ ...f, paid_to: e.target.value }))}
+                              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Description (optional)"
+                              value={editForm.description}
+                              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                            />
+                            <select
+                              value={editForm.category}
+                              onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
+                            >
+                              {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                            </select>
+                            {editError && (
+                              <p className="text-xs text-red-600">{editError}</p>
+                            )}
+                            <div className="flex gap-2 pt-0.5">
+                              <button
+                                onClick={() => handleEditSave(exp.id)}
+                                disabled={editSaving || !editForm.date || !editForm.amount}
+                                className="flex-1 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg disabled:opacity-40 hover:bg-blue-700 transition-colors"
+                              >
+                                {editSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => { setEditingId(null); setEditError(null) }}
+                                className="flex-1 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-white transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setDeleteId(exp.id)}
-                            className="text-base leading-none text-gray-300 hover:text-red-400 shrink-0 transition-colors"
-                          >
-                            🗑
-                          </button>
+                          <div className="flex items-start gap-3 px-4 py-2.5">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-900 truncate">
+                                {exp.description || exp.paid_to || '(no description)'}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {fmtDate(exp.date)} · {exp.category}
+                                {exp.paid_to ? ` · ${exp.paid_to}` : ''}
+                              </p>
+                            </div>
+                            <span className="text-sm font-medium text-gray-800 shrink-0">{fmt(exp.amount)}</span>
+                            {deleteId === exp.id ? (
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button onClick={() => handleDelete(exp.id)} className="text-xs text-red-600 font-medium">Delete</button>
+                                <button onClick={() => setDeleteId(null)} className="text-xs text-gray-400">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-0.5 shrink-0">
+                                <button
+                                  onClick={() => openEdit(exp)}
+                                  className="text-base leading-none text-gray-300 hover:text-gray-500 transition-colors p-0.5"
+                                  title="Edit"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => setDeleteId(exp.id)}
+                                  className="text-base leading-none text-gray-300 hover:text-red-400 transition-colors p-0.5"
+                                  title="Delete"
+                                >
+                                  🗑
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
