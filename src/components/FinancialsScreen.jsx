@@ -197,9 +197,26 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
       rows.push(row)
     }
     if (rows.length === 0) { setCsvError('No valid rows found in CSV.'); return }
-    const { error } = await supabase
+
+    const { data: existing, error: fetchErr } = await supabase
       .from('expenses')
-      .upsert(rows, { onConflict: 'date,paid_to,amount,description', ignoreDuplicates: true })
+      .select('date, paid_to, amount, description')
+    if (fetchErr) { setCsvError(fetchErr.message); return }
+
+    const norm = v => (v == null || v === '') ? '' : String(v).trim()
+    const existingKeys = new Set(
+      (existing || []).map(r => `${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}`)
+    )
+    const toInsert = rows.filter(r =>
+      !existingKeys.has(`${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}`)
+    )
+
+    if (toInsert.length === 0) {
+      setCsvError('No new expenses to import — all rows already exist.')
+      e.target.value = ''
+      return
+    }
+    const { error } = await supabase.from('expenses').insert(toInsert)
     if (error) { setCsvError(error.message); return }
     e.target.value = ''
     onRefresh()
