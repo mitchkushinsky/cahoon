@@ -199,7 +199,7 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
     if (rows.length === 0) { setCsvError('No valid rows found in CSV.'); return }
     const { error } = await supabase
       .from('expenses')
-      .upsert(rows, { onConflict: 'date,paid_to,amount', ignoreDuplicates: true })
+      .upsert(rows, { onConflict: 'date,paid_to,amount,description', ignoreDuplicates: true })
     if (error) { setCsvError(error.message); return }
     e.target.value = ''
     onRefresh()
