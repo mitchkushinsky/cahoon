@@ -88,6 +88,7 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
   const [deleteId, setDeleteId] = useState(null)
   const [filterCategory, setFilterCategory] = useState('All')
   const [csvError, setCsvError] = useState(null)
+  const [csvSuccess, setCsvSuccess] = useState(null)
   const [form, setForm] = useState({ date: '', description: '', paid_to: '', amount: '', category: 'Utilities' })
 
   // Months expanded state — current month open by default, past months closed
@@ -151,6 +152,7 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
 
   async function handleCSV(e) {
     setCsvError(null)
+    setCsvSuccess(null)
     const file = e.target.files?.[0]
     if (!file) return
     const text = await file.text()
@@ -211,14 +213,22 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
       !existingKeys.has(`${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}`)
     )
 
-    if (toInsert.length === 0) {
-      setCsvError('No new expenses to import — all rows already exist.')
-      e.target.value = ''
-      return
+    let inserted = 0
+    let skipped  = rows.length - toInsert.length // client-side dedup misses
+    for (const row of toInsert) {
+      const { error } = await supabase.from('expenses').insert(row)
+      if (error) {
+        if (error.code === '23505') { skipped++; continue }
+        else { console.error('Import error:', error) }
+      } else {
+        inserted++
+      }
     }
-    const { error } = await supabase.from('expenses').insert(toInsert)
-    if (error) { setCsvError(error.message); return }
     e.target.value = ''
+    const msg = skipped > 0
+      ? `Imported ${inserted} new expense${inserted !== 1 ? 's' : ''}, skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}`
+      : `Imported ${inserted} new expense${inserted !== 1 ? 's' : ''}`
+    setCsvSuccess(msg)
     onRefresh()
   }
 
@@ -250,6 +260,11 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
       {csvError && (
         <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {csvError}
+        </div>
+      )}
+      {csvSuccess && (
+        <div className="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          {csvSuccess}
         </div>
       )}
 
