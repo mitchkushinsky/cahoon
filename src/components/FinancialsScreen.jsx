@@ -156,7 +156,23 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
     const text = await file.text()
     const lines = text.trim().split('\n')
     if (lines.length < 2) { setCsvError('CSV is empty.'); return }
-    const cols = lines[0].split(',').map(c => c.trim().toLowerCase().replace(/"/g, ''))
+
+    // Parse a CSV line respecting double-quoted fields (handles commas inside quotes)
+    function parseCSVLine(line) {
+      const fields = []
+      let current = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (c === '"') { inQuotes = !inQuotes }
+        else if (c === ',' && !inQuotes) { fields.push(current.trim()); current = '' }
+        else { current += c }
+      }
+      fields.push(current.trim())
+      return fields
+    }
+
+    const cols = parseCSVLine(lines[0]).map(c => c.toLowerCase())
     const dateIdx   = cols.indexOf('date')
     const descIdx   = cols.indexOf('description')
     const amtIdx    = cols.indexOf('amount')
@@ -168,26 +184,22 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
     }
     const rows = []
     for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+      const vals = parseCSVLine(lines[i])
+      const rawAmt = (vals[amtIdx] || '').replace(/,/g, '').replace(/\$/g, '').trim()
       const row = {
         date:        vals[dateIdx] || '',
         description: descIdx   >= 0 ? (vals[descIdx]   || null) : null,
         paid_to:     paidToIdx >= 0 ? (vals[paidToIdx] || null) : null,
-        amount:      parseFloat(vals[amtIdx]),
+        amount:      parseFloat(rawAmt),
         category:    catIdx >= 0 ? (vals[catIdx] || 'Miscellaneous') : 'Miscellaneous',
       }
       if (!row.date || isNaN(row.amount)) continue
       rows.push(row)
     }
     if (rows.length === 0) { setCsvError('No valid rows found in CSV.'); return }
-    const existing = new Set(expenses.map(e => `${e.date}|${e.paid_to}|${e.amount}`))
-    const toInsert = rows.filter(r => !existing.has(`${r.date}|${r.paid_to}|${r.amount}`))
-    if (toInsert.length === 0) {
-      setCsvError('No new expenses to import — all rows already exist.')
-      e.target.value = ''
-      return
-    }
-    const { error } = await supabase.from('expenses').insert(toInsert)
+    const { error } = await supabase
+      .from('expenses')
+      .upsert(rows, { onConflict: 'date,paid_to,amount', ignoreDuplicates: true })
     if (error) { setCsvError(error.message); return }
     e.target.value = ''
     onRefresh()
