@@ -407,6 +407,287 @@ function RentersTab() {
 
 // ─── ImportTab ────────────────────────────────────────────────────────────────
 
+const PAST_IMPORT_YEARS = [2022, 2023, 2024, 2025]
+
+function PastSeasonImportSection() {
+  const [year, setYear]             = useState(2025)
+  const [csvUrl, setCsvUrl]         = useState('')
+  const [status, setStatus]         = useState('idle') // idle | fetching | preview | importing | done | error
+  const [previewItems, setPreviewItems] = useState([])
+  const [result, setResult]         = useState(null)
+  const [errorMsg, setErrorMsg]     = useState('')
+
+  const reset = () => {
+    setStatus('idle')
+    setPreviewItems([])
+    setResult(null)
+    setErrorMsg('')
+    setCsvUrl('')
+  }
+
+  const fmtRange = (entry) =>
+    `${fmtDate(toISODate(entry.startDate))}–${fmtDate(toISODate(entry.endDate))}`
+
+  const handleFetch = async () => {
+    if (!csvUrl.trim()) return
+    setStatus('fetching')
+    setErrorMsg('')
+    try {
+      const resp = await fetch(csvUrl.trim())
+      if (!resp.ok) throw new Error(`Failed to fetch CSV (${resp.status})`)
+      const text = await resp.text()
+      const allEntries = parseCSVEntries(text).filter(e => e.name && e.startDate)
+
+      const { data: existingRentals } = await supabase
+        .from('rentals')
+        .select('start_date, renters(email, name)')
+        .eq('season_year', year)
+
+      const existingSet = new Set()
+      for (const r of (existingRentals || [])) {
+        const email = r.renters?.email?.toLowerCase().trim()
+        const name  = r.renters?.name?.toLowerCase().trim()
+        if (email) existingSet.add(`e:${email}:${r.start_date}`)
+        else if (name) existingSet.add(`n:${name}:${r.start_date}`)
+      }
+
+      const items = allEntries.map(entry => {
+        if (entry.isOwnerUse) return { entry, type: 'owner' }
+        const email    = (entry.email || '').toLowerCase().trim()
+        const startIso = toISODate(entry.startDate)
+        const isDupe   = (email && existingSet.has(`e:${email}:${startIso}`)) ||
+                         existingSet.has(`n:${entry.name.toLowerCase().trim()}:${startIso}`)
+        return { entry, type: isDupe ? 'duplicate' : 'new' }
+      })
+
+      setPreviewItems(items)
+      setStatus('preview')
+    } catch (err) {
+      setErrorMsg(err.message || 'Unknown error')
+      setStatus('error')
+    }
+  }
+
+  const newCount = previewItems.filter(i => i.type === 'new').length
+
+  const handleImport = async () => {
+    setStatus('importing')
+    let inserted = 0
+    let skipped  = 0
+    const errors = []
+
+    for (const { entry } of previewItems.filter(i => i.type === 'new')) {
+      try {
+        const email    = (entry.email || '').toLowerCase().trim()
+        const startIso = toISODate(entry.startDate)
+        let renterId
+
+        if (email) {
+          const { data: existing } = await supabase
+            .from('renters').select('id').eq('email', email).maybeSingle()
+          if (existing) {
+            renterId = existing.id
+          } else {
+            const { data: created, error } = await supabase
+              .from('renters')
+              .insert({ name: entry.name, email, first_year_rented: year })
+              .select('id').single()
+            if (error) throw new Error(`Renter "${entry.name}": ${error.message}`)
+            renterId = created.id
+          }
+        } else {
+          const { data: existing } = await supabase
+            .from('renters').select('id').ilike('name', entry.name.trim()).maybeSingle()
+          if (existing) {
+            renterId = existing.id
+          } else {
+            const { data: created, error } = await supabase
+              .from('renters')
+              .insert({ name: entry.name, first_year_rented: year })
+              .select('id').single()
+            if (error) throw new Error(`Renter "${entry.name}": ${error.message}`)
+            renterId = created.id
+          }
+        }
+
+        const { data: existingRental } = await supabase
+          .from('rentals').select('id')
+          .eq('renter_id', renterId).eq('season_year', year).eq('start_date', startIso)
+          .maybeSingle()
+
+        if (existingRental) { skipped++; continue }
+
+        const { error: rentalErr } = await supabase.from('rentals').insert({
+          renter_id:       renterId,
+          season_year:     year,
+          start_date:      startIso,
+          end_date:        toISODate(entry.endDate),
+          total_rent:      entry.totalRent    || null,
+          deposit_owed:    entry.depositOwed  || null,
+          lease_status:    entry.leaseStatus  || null,
+          balance_due:     entry.balanceDue   || null,
+          payment1_owed:   entry.depositOwed   || null,
+          payment1_amount: entry.depositActual?.amount  || null,
+          payment1_date:   entry.depositActual?.date  ? toISODate(entry.depositActual.date)  : null,
+          payment1_method: entry.depositActual?.method  || null,
+          payment2_owed:   entry.payment2Owed  || null,
+          payment2_amount: entry.payment2Actual?.amount || null,
+          payment2_date:   entry.payment2Actual?.date ? toISODate(entry.payment2Actual.date) : null,
+          payment2_method: entry.payment2Actual?.method || null,
+          payment3_owed:   entry.finalOwed     || null,
+          payment3_amount: entry.finalActual?.amount   || null,
+          payment3_date:   entry.finalActual?.date   ? toISODate(entry.finalActual.date)   : null,
+          payment3_method: entry.finalActual?.method   || null,
+          lease_url:        entry.leaseUrl || null,
+          smart_lock_combo: null,
+          source:           'csv',
+        })
+
+        if (rentalErr) errors.push(`"${entry.name}" ${startIso}: ${rentalErr.message}`)
+        else inserted++
+      } catch (err) {
+        errors.push(err.message)
+      }
+    }
+
+    setResult({ inserted, skipped, errors })
+    setStatus('done')
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-gray-900">Import Past Season</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Import historical rentals from a published Google Sheets CSV URL.
+        </p>
+      </div>
+
+      {(status === 'idle' || status === 'error') && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600 w-24 flex-shrink-0">Season Year</label>
+            <select
+              value={year}
+              onChange={e => { setYear(Number(e.target.value)); setErrorMsg('') }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+            >
+              {PAST_IMPORT_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">CSV URL</label>
+            <input
+              type="url"
+              placeholder="https://docs.google.com/…&output=csv"
+              value={csvUrl}
+              onChange={e => setCsvUrl(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+            />
+          </div>
+
+          {status === 'error' && (
+            <p className="text-sm text-red-600">{errorMsg}</p>
+          )}
+
+          <button
+            onClick={handleFetch}
+            disabled={!csvUrl.trim()}
+            className="w-full py-2.5 rounded-lg text-sm font-medium bg-gray-700 text-white disabled:opacity-40 hover:bg-gray-800 transition-colors"
+          >
+            Fetch &amp; Preview
+          </button>
+        </div>
+      )}
+
+      {status === 'fetching' && (
+        <div className="flex items-center gap-2 py-2">
+          <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
+          <span className="text-sm text-gray-500">Fetching CSV…</span>
+        </div>
+      )}
+
+      {(status === 'preview' || status === 'importing') && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Found {previewItems.filter(i => i.type !== 'owner').length} rentals for {year}
+          </p>
+
+          <div className="space-y-0.5 max-h-64 overflow-y-auto text-sm">
+            {previewItems.map((item, i) => {
+              if (item.type === 'owner') return (
+                <div key={i} className="flex items-baseline gap-2 text-gray-400 py-0.5">
+                  <span className="flex-shrink-0">🏠</span>
+                  <span>{item.entry.name} · {fmtRange(item.entry)} (skipped)</span>
+                </div>
+              )
+              if (item.type === 'duplicate') return (
+                <div key={i} className="flex items-baseline gap-2 text-amber-600 py-0.5">
+                  <span className="flex-shrink-0">⚠️</span>
+                  <span>
+                    {item.entry.name} · {fmtRange(item.entry)}
+                    {item.entry.totalRent ? ` · $${item.entry.totalRent.toLocaleString()}` : ''}
+                    {' '}
+                    <span className="text-amber-500 text-xs">Already exists (will skip)</span>
+                  </span>
+                </div>
+              )
+              return (
+                <div key={i} className="flex items-baseline gap-2 text-gray-700 py-0.5">
+                  <span className="flex-shrink-0 text-green-600">✅</span>
+                  <span>
+                    {item.entry.name} · {fmtRange(item.entry)}
+                    {item.entry.totalRent ? ` · $${item.entry.totalRent.toLocaleString()}` : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={reset}
+              className="px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={newCount === 0 || status === 'importing'}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
+            >
+              {status === 'importing'
+                ? 'Importing…'
+                : `Import ${newCount} rental${newCount !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {status === 'done' && result && (
+        <div className="space-y-3">
+          <p className="text-sm text-green-700 font-medium">
+            Imported {result.inserted} rental{result.inserted !== 1 ? 's' : ''} for {year}.
+            {result.skipped > 0 ? ` ${result.skipped} skipped (already existed).` : ''}
+          </p>
+          {result.errors.length > 0 && (
+            <div className="text-xs text-red-600 space-y-0.5">
+              {result.errors.map((e, i) => <p key={i}>{e}</p>)}
+            </div>
+          )}
+          <button
+            onClick={reset}
+            className="w-full py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+          >
+            Import Another Season
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MigrateSection({ csvUrl, onDone }) {
   const [rentersEmpty, setRentersEmpty] = useState(null)
   const [status, setStatus] = useState('idle') // idle | running | done | error
@@ -735,6 +1016,8 @@ function ImportTab({ csvUrl, onDataRefresh }) {
           </div>
         )}
       </div>
+
+      <PastSeasonImportSection />
     </div>
   )
 }
