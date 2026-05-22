@@ -78,7 +78,7 @@ export default function App() {
       if (USE_SUPABASE_RENTALS) {
         const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp] =
           await Promise.all([
-            supabase.from('rentals').select('*'),
+            supabase.from('rentals').select('*').eq('season_year', 2026),
             supabase.from('renters').select('*'),
             supabase.from('appointments').select('*'),
             supabase.from('owner_use').select('*'),
