@@ -8,6 +8,7 @@ const EXPENSE_CATEGORIES = [
   'Cleaning',
   'Property Tax',
   'Repairs',
+  'Furnishings',
   'Landscaping',
   'Advertising',
   'Travel',
