@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const METHODS = ['Venmo', 'Zelle', 'Paypal', 'Check']
+const METHODS = ['Venmo', 'Zelle', 'Paypal', 'Check', 'Airbnb']
 
 function todayISO() {
   const d = new Date()
