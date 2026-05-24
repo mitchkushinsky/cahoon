@@ -90,11 +90,22 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
   const [filterCategory, setFilterCategory] = useState('All')
   const [csvError, setCsvError] = useState(null)
   const [csvSuccess, setCsvSuccess] = useState(null)
+  const [csvImportYear, setCsvImportYear] = useState(new Date().getFullYear())
+  const [csvYears, setCsvYears] = useState([new Date().getFullYear()])
   const [form, setForm] = useState({ date: '', description: '', paid_to: '', amount: '', category: 'Utilities' })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ date: '', description: '', paid_to: '', amount: '', category: 'Utilities' })
   const [editError, setEditError] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
+
+  useEffect(() => {
+    supabase.from('rentals').select('season_year').then(({ data }) => {
+      const current = new Date().getFullYear()
+      const years = [...new Set([current, ...(data || []).map(r => r.season_year).filter(Boolean)])]
+        .sort((a, b) => b - a)
+      setCsvYears(years)
+    })
+  }, [])
 
   // Months expanded state — current month open by default, past months closed
   const [expandedMonths, setExpandedMonths] = useState(() => new Set([currentMonthKey()]))
@@ -234,6 +245,7 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
         paid_to:     paidToIdx >= 0 ? (vals[paidToIdx] || null) : null,
         amount:      parseFloat(rawAmt),
         category:    catIdx >= 0 ? (vals[catIdx] || 'Miscellaneous') : 'Miscellaneous',
+        season_year: csvImportYear,
       }
       if (!row.date || isNaN(row.amount)) continue
       rows.push(row)
@@ -285,6 +297,14 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
           {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
         </select>
         <div className="flex-1" />
+        <select
+          value={csvImportYear}
+          onChange={e => setCsvImportYear(Number(e.target.value))}
+          className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+          title="Season year for CSV import"
+        >
+          {csvYears.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
         <label className="text-sm text-blue-600 font-medium cursor-pointer hover:underline">
           Import CSV
           <input type="file" accept=".csv" className="sr-only" onChange={handleCSV} />
