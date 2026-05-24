@@ -254,15 +254,15 @@ function ExpensesTab({ expenses, selectedYear, onRefresh }) {
 
     const { data: existing, error: fetchErr } = await supabase
       .from('expenses')
-      .select('date, paid_to, amount, description')
+      .select('date, paid_to, amount, description, season_year')
     if (fetchErr) { setCsvError(fetchErr.message); return }
 
     const norm = v => (v == null || v === '') ? '' : String(v).trim()
     const existingKeys = new Set(
-      (existing || []).map(r => `${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}`)
+      (existing || []).map(r => `${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}|${r.season_year ?? ''}`)
     )
     const toInsert = rows.filter(r =>
-      !existingKeys.has(`${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}`)
+      !existingKeys.has(`${r.date}|${norm(r.paid_to)}|${r.amount}|${norm(r.description)}|${r.season_year ?? ''}`)
     )
 
     let inserted = 0
