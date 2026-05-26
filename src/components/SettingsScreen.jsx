@@ -1025,26 +1025,33 @@ function ImportTab({ csvUrl, onDataRefresh }) {
 // ─── PropertyTab ─────────────────────────────────────────────────────────────
 
 function PropertyTab() {
-  const [code, setCode]     = useState('')
-  const [loaded, setLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved]   = useState(false)
+  const [lockCode, setLockCode]       = useState('')
+  const [lockboxCode, setLockboxCode] = useState('')
+  const [loaded, setLoaded]           = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [saved, setSaved]             = useState(false)
 
   useEffect(() => {
     supabase
       .from('property_settings')
-      .select('value')
-      .eq('key', 'owner_lock_code')
-      .maybeSingle()
-      .then(({ data }) => { setCode(data?.value || ''); setLoaded(true) })
+      .select('key, value')
+      .in('key', ['owner_lock_code', 'lockbox_code'])
+      .then(({ data }) => {
+        const byKey = Object.fromEntries((data || []).map(r => [r.key, r.value]))
+        setLockCode(byKey['owner_lock_code'] || '')
+        setLockboxCode(byKey['lockbox_code'] || '')
+        setLoaded(true)
+      })
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
     setSaved(false)
-    await supabase
-      .from('property_settings')
-      .upsert({ key: 'owner_lock_code', value: code.trim(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    const now = new Date().toISOString()
+    await supabase.from('property_settings').upsert([
+      { key: 'owner_lock_code', value: lockCode.trim(),    updated_at: now },
+      { key: 'lockbox_code',    value: lockboxCode.trim(), updated_at: now },
+    ], { onConflict: 'key' })
     setSaving(false)
     setSaved(true)
   }
@@ -1058,19 +1065,34 @@ function PropertyTab() {
   return (
     <div className="px-4 py-4 space-y-4">
       <div className="border border-gray-200 rounded-xl p-4 space-y-4">
-        <div>
+        <div className="space-y-1">
           <p className="text-sm font-semibold text-gray-900">Owner Smart Lock Code</p>
-          <p className="text-xs text-gray-500 mt-0.5">Your personal entry code when the house is in owner use</p>
+          <p className="text-xs text-gray-500">Your personal entry code when the house is in owner use</p>
         </div>
         <input
           type="text"
           inputMode="numeric"
           maxLength={8}
           placeholder="e.g. 2193"
-          value={code}
-          onChange={e => { setCode(e.target.value); setSaved(false) }}
+          value={lockCode}
+          onChange={e => { setLockCode(e.target.value); setSaved(false) }}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
         />
+
+        <div className="border-t border-gray-100 pt-4 space-y-1">
+          <p className="text-sm font-semibold text-gray-900">Lock Box Code</p>
+          <p className="text-xs text-gray-500">Permanent backup lock box combination</p>
+        </div>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={8}
+          placeholder="e.g. 4872"
+          value={lockboxCode}
+          onChange={e => { setLockboxCode(e.target.value); setSaved(false) }}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+        />
+
         <button
           onClick={handleSave}
           disabled={saving}

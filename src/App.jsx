@@ -55,6 +55,7 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [completedTasks, setCompletedTasks] = useState([])
   const [ownerLockCode, setOwnerLockCode] = useState('')
+  const [lockboxCode, setLockboxCode]     = useState('')
 
   const showDemoToast = useCallback(() => {
     setDemoToast(true)
@@ -91,7 +92,7 @@ export default function App() {
             supabase.from('occupancy_tax_payments').select('*'),
             supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
             supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
-            supabase.from('property_settings').select('value').eq('key', 'owner_lock_code').maybeSingle(),
+            supabase.from('property_settings').select('key, value').in('key', ['owner_lock_code', 'lockbox_code']),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
@@ -111,7 +112,9 @@ export default function App() {
         setTaxPayments(taxResp.data || [])
         setTasks(tasksResp.data || [])
         setCompletedTasks(completedTasksResp.data || [])
-        setOwnerLockCode(lockCodeResp.data?.value || '')
+        const propByKey = Object.fromEntries((lockCodeResp.data || []).map(r => [r.key, r.value]))
+        setOwnerLockCode(propByKey['owner_lock_code'] || '')
+        setLockboxCode(propByKey['lockbox_code'] || '')
       } else {
         // CSV fallback path
         const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] = await Promise.all([
@@ -150,7 +153,9 @@ export default function App() {
         setTaxPayments(taxResp.data || [])
         setTasks(tasksResp.data || [])
         setCompletedTasks(completedTasksResp.data || [])
-        setOwnerLockCode(lockCodeResp.data?.value || '')
+        const propByKey = Object.fromEntries((lockCodeResp.data || []).map(r => [r.key, r.value]))
+        setOwnerLockCode(propByKey['owner_lock_code'] || '')
+        setLockboxCode(propByKey['lockbox_code'] || '')
       }
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
@@ -430,6 +435,7 @@ export default function App() {
                 isDemo={isDemo}
                 onDemoWrite={showDemoToast}
                 ownerLockCode={ownerLockCode}
+                lockboxCode={lockboxCode}
               />
             ) : (
               <VacantModal
