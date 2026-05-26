@@ -27,6 +27,80 @@ function calcMilestones(totalRent) {
   return { payment1_owed: deposit, payment2_owed: payment2, payment3_owed: payment3 }
 }
 
+// ─── SmartLockField ──────────────────────────────────────────────────────────
+
+function SmartLockField({ rentalId, initialCombo, isAdmin, isDemo, onDemoWrite }) {
+  const [combo, setCombo]     = useState(initialCombo || '')
+  const [draft, setDraft]     = useState(initialCombo || '')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [flash, setFlash]     = useState(false)
+
+  const save = async () => {
+    if (isDemo) { onDemoWrite(); return }
+    setSaving(true)
+    await supabase.from('rentals').update({ smart_lock_combo: draft.trim() || null }).eq('id', rentalId)
+    setCombo(draft.trim())
+    setSaving(false)
+    if (isAdmin) {
+      setEditing(false)
+    } else {
+      setFlash(true)
+      setTimeout(() => setFlash(false), 2000)
+    }
+  }
+
+  const cancel = () => { setDraft(combo); setEditing(false) }
+
+  if (isAdmin) {
+    if (editing) return (
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-gray-500 flex-shrink-0">🔑 Smart Lock:</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          className="border border-gray-200 rounded-lg px-2 py-1 text-sm font-mono w-24 focus:outline-none focus:border-blue-400"
+          autoFocus
+        />
+        <button onClick={save} disabled={saving} className="text-sm font-medium text-blue-600 hover:underline disabled:opacity-40">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={cancel} className="text-sm text-gray-400 hover:text-gray-600">Cancel</button>
+      </div>
+    )
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-500">🔑 Smart Lock:</span>
+        {combo
+          ? <span className="text-sm font-mono font-semibold text-gray-900 tracking-widest">{combo}</span>
+          : <span className="text-sm text-gray-400 italic">Not set</span>}
+        <button onClick={() => { setDraft(combo); setEditing(true) }} className="text-gray-400 hover:text-gray-600 text-xs">✏️</button>
+      </div>
+    )
+  }
+
+  // Caretaker mode — always editable
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-sm text-gray-500 flex-shrink-0">🔑 Smart Lock:</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        placeholder="Enter code"
+        className="border border-gray-200 rounded-lg px-2 py-1 text-sm font-mono w-28 focus:outline-none focus:border-blue-400"
+      />
+      <button onClick={save} disabled={saving} className="text-sm font-medium text-blue-600 hover:underline disabled:opacity-40">
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      {flash && <span className="text-green-600 text-xs font-medium">✅ Saved</span>}
+    </div>
+  )
+}
+
 // ─── EditRentalForm ───────────────────────────────────────────────────────────
 
 function EditRentalForm({ week, onSaved, onCancel, isDemo, onDemoWrite }) {
@@ -220,6 +294,14 @@ export default function RenterModal({ week, appointments, commentOverride, caret
           </div>
         )
       )}
+
+      <SmartLockField
+        rentalId={rentalId}
+        initialCombo={week.smartLockCombo}
+        isAdmin={isAdmin}
+        isDemo={isDemo}
+        onDemoWrite={onDemoWrite}
+      />
 
       {isAdmin && (
         <>
