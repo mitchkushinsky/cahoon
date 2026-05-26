@@ -4,7 +4,7 @@ import { toISODate } from '../lib/parseCSV'
 import AppointmentList from './AppointmentList'
 import CaretakerNotes from './CaretakerNotes'
 
-export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite }) {
+export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite, ownerLockCode }) {
   const { weekStart } = week
   const [editing, setEditing] = useState(false)
   const [notes, setNotes] = useState(ownerUseRow?.notes || '')
@@ -80,6 +80,12 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
           ) : (
             <p className="text-sm text-gray-500 italic">{ownerUseRow?.notes || 'No notes'}</p>
           )}
+        </div>
+      )}
+
+      {isAdmin && ownerLockCode && (
+        <div className="bg-gray-50 rounded-xl px-4 py-3">
+          <p className="text-sm text-gray-700">🔑 Entry Code: <span className="font-mono font-semibold tracking-widest">{ownerLockCode}</span></p>
         </div>
       )}
 

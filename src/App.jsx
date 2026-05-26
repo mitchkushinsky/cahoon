@@ -54,6 +54,7 @@ export default function App() {
   const [demoToast, setDemoToast] = useState(false)
   const [tasks, setTasks] = useState([])
   const [completedTasks, setCompletedTasks] = useState([])
+  const [ownerLockCode, setOwnerLockCode] = useState('')
 
   const showDemoToast = useCallback(() => {
     setDemoToast(true)
@@ -76,7 +77,7 @@ export default function App() {
     }
     try {
       if (USE_SUPABASE_RENTALS) {
-        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp] =
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] =
           await Promise.all([
             supabase.from('rentals').select('*').eq('season_year', 2026),
             supabase.from('renters').select('*'),
@@ -90,6 +91,7 @@ export default function App() {
             supabase.from('occupancy_tax_payments').select('*'),
             supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
             supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
+            supabase.from('property_settings').select('value').eq('key', 'owner_lock_code').maybeSingle(),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
@@ -109,9 +111,10 @@ export default function App() {
         setTaxPayments(taxResp.data || [])
         setTasks(tasksResp.data || [])
         setCompletedTasks(completedTasksResp.data || [])
+        setOwnerLockCode(lockCodeResp.data?.value || '')
       } else {
         // CSV fallback path
-        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp] = await Promise.all([
+        const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] = await Promise.all([
           fetch(CSV_URL).then(r => {
             if (!r.ok) throw new Error('Failed to fetch schedule from Google Sheets')
             return r.text()
@@ -126,6 +129,7 @@ export default function App() {
           supabase.from('occupancy_tax_payments').select('*'),
           supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
           supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
+          supabase.from('property_settings').select('value').eq('key', 'owner_lock_code').maybeSingle(),
         ])
 
         const parsedWeeks = parseCSV(csvResp, apptResp.data || [])
@@ -146,6 +150,7 @@ export default function App() {
         setTaxPayments(taxResp.data || [])
         setTasks(tasksResp.data || [])
         setCompletedTasks(completedTasksResp.data || [])
+        setOwnerLockCode(lockCodeResp.data?.value || '')
       }
     } catch (err) {
       setError(err.message || 'Something went wrong loading the schedule.')
@@ -424,6 +429,7 @@ export default function App() {
                 onRefresh={handleRefresh}
                 isDemo={isDemo}
                 onDemoWrite={showDemoToast}
+                ownerLockCode={ownerLockCode}
               />
             ) : (
               <VacantModal

@@ -1022,6 +1022,67 @@ function ImportTab({ csvUrl, onDataRefresh }) {
   )
 }
 
+// ─── PropertyTab ─────────────────────────────────────────────────────────────
+
+function PropertyTab() {
+  const [code, setCode]     = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('property_settings')
+      .select('value')
+      .eq('key', 'owner_lock_code')
+      .maybeSingle()
+      .then(({ data }) => { setCode(data?.value || ''); setLoaded(true) })
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    await supabase
+      .from('property_settings')
+      .upsert({ key: 'owner_lock_code', value: code.trim(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setSaving(false)
+    setSaved(true)
+  }
+
+  if (!loaded) return (
+    <div className="flex justify-center py-8">
+      <div className="w-6 h-6 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+    </div>
+  )
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Owner Smart Lock Code</p>
+          <p className="text-xs text-gray-500 mt-0.5">Your personal entry code when the house is in owner use</p>
+        </div>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={8}
+          placeholder="e.g. 2193"
+          value={code}
+          onChange={e => { setCode(e.target.value); setSaved(false) }}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+        />
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-2.5 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
+        >
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── SettingsScreen ───────────────────────────────────────────────────────────
 
 export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
@@ -1065,8 +1126,9 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
       <div className="border-b border-gray-100 flex-shrink-0">
         <div className="max-w-2xl mx-auto px-4 flex">
           {[
-            { key: 'renters', label: 'Renters' },
-            { key: 'import',  label: 'Import' },
+            { key: 'renters',  label: 'Renters' },
+            { key: 'import',   label: 'Import' },
+            { key: 'property', label: 'Property' },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -1088,7 +1150,9 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
         <div className="max-w-2xl mx-auto">
           {tab === 'renters'
             ? <RentersTab />
-            : <ImportTab csvUrl={csvUrl} onDataRefresh={() => { onDataRefresh(); handleClose() }} />
+            : tab === 'import'
+              ? <ImportTab csvUrl={csvUrl} onDataRefresh={() => { onDataRefresh(); handleClose() }} />
+              : <PropertyTab />
           }
         </div>
       </div>
