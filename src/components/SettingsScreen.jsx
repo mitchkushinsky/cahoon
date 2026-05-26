@@ -1028,8 +1028,10 @@ function PropertyTab() {
   const [lockCode, setLockCode]       = useState('')
   const [lockboxCode, setLockboxCode] = useState('')
   const [loaded, setLoaded]           = useState(false)
+  const [editing, setEditing]         = useState(false)
+  const [draftLock, setDraftLock]     = useState('')
+  const [draftLockbox, setDraftLockbox] = useState('')
   const [saving, setSaving]           = useState(false)
-  const [saved, setSaved]             = useState(false)
 
   useEffect(() => {
     supabase
@@ -1044,16 +1046,25 @@ function PropertyTab() {
       })
   }, [])
 
+  const startEdit = () => {
+    setDraftLock(lockCode)
+    setDraftLockbox(lockboxCode)
+    setEditing(true)
+  }
+
+  const handleCancel = () => setEditing(false)
+
   const handleSave = async () => {
     setSaving(true)
-    setSaved(false)
     const now = new Date().toISOString()
     await supabase.from('property_settings').upsert([
-      { key: 'owner_lock_code', value: lockCode.trim(),    updated_at: now },
-      { key: 'lockbox_code',    value: lockboxCode.trim(), updated_at: now },
+      { key: 'owner_lock_code', value: draftLock.trim(),    updated_at: now },
+      { key: 'lockbox_code',    value: draftLockbox.trim(), updated_at: now },
     ], { onConflict: 'key' })
+    setLockCode(draftLock.trim())
+    setLockboxCode(draftLockbox.trim())
     setSaving(false)
-    setSaved(true)
+    setEditing(false)
   }
 
   if (!loaded) return (
@@ -1065,41 +1076,84 @@ function PropertyTab() {
   return (
     <div className="px-4 py-4 space-y-4">
       <div className="border border-gray-200 rounded-xl p-4 space-y-4">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-gray-900">Owner Smart Lock Code</p>
-          <p className="text-xs text-gray-500">Your personal entry code when the house is in owner use</p>
+        {/* Header row */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-900">Access Codes</p>
+          {!editing && (
+            <button
+              onClick={startEdit}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              ✏️ Edit
+            </button>
+          )}
         </div>
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={8}
-          placeholder="e.g. 2193"
-          value={lockCode}
-          onChange={e => { setLockCode(e.target.value); setSaved(false) }}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
-        />
 
-        <div className="border-t border-gray-100 pt-4 space-y-1">
-          <p className="text-sm font-semibold text-gray-900">Lock Box Code</p>
-          <p className="text-xs text-gray-500">Permanent backup lock box combination</p>
-        </div>
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={8}
-          placeholder="e.g. 4872"
-          value={lockboxCode}
-          onChange={e => { setLockboxCode(e.target.value); setSaved(false) }}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
-        />
+        {editing ? (
+          <>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-700">Owner Smart Lock Code</p>
+              <p className="text-xs text-gray-500">Your personal entry code when the house is in owner use</p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="e.g. 2193"
+                value={draftLock}
+                onChange={e => setDraftLock(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 mt-1"
+              />
+            </div>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-2.5 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
-        >
-          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
-        </button>
+            <div className="border-t border-gray-100 pt-3 space-y-1">
+              <p className="text-sm font-medium text-gray-700">Lock Box Code</p>
+              <p className="text-xs text-gray-500">Permanent backup lock box combination</p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="e.g. 4872"
+                value={draftLockbox}
+                onChange={e => setDraftLockbox(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 mt-1"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleCancel}
+                className="flex-1 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium text-gray-500">Owner Smart Lock Code</p>
+              <p className="text-xs text-gray-400">Your personal entry code when the house is in owner use</p>
+              <p className={`text-sm font-mono mt-1 ${lockCode ? 'font-semibold text-gray-900 tracking-widest' : 'text-gray-400 italic'}`}>
+                {lockCode || 'Not set'}
+              </p>
+            </div>
+
+            <div className="border-t border-gray-100 pt-3 space-y-0.5">
+              <p className="text-xs font-medium text-gray-500">Lock Box Code</p>
+              <p className="text-xs text-gray-400">Permanent backup lock box combination</p>
+              <p className={`text-sm font-mono mt-1 ${lockboxCode ? 'font-semibold text-gray-900 tracking-widest' : 'text-gray-400 italic'}`}>
+                {lockboxCode || 'Not set'}
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
