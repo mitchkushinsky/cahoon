@@ -783,6 +783,9 @@ function OccupancyTaxTab({ weeks, selectedYear, taxPayments, onRefresh }) {
 // ─── YearEndReportTab ──────────────────────────────────────────────────────────
 
 function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
+  const currentYear = new Date().getFullYear()
+  const isPastYear  = selectedYear < currentYear
+
   const allEntries = getRenterEntries(weeks)
   const yearEntries = allEntries.filter(e => {
     const end = e.renterInfo?.dates?.end || e.endDate
@@ -803,7 +806,13 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
     return s + paid1 + paid2 + paid3
   }, 0)
   const outstandingBalance = revenueContracted - revenueCollected
-  const totalTax      = yearEntries.reduce((s, e) => s + taxForEntry(e), 0)
+
+  const totalTaxCalculated = yearEntries.reduce((s, e) => s + taxForEntry(e), 0)
+  const totalTaxPaid = taxPayments
+    .filter(p => p.period_month && parseInt(p.period_month.split('-')[0]) === selectedYear)
+    .reduce((s, p) => s + Number(p.amount || 0), 0)
+  const totalTax    = isPastYear ? totalTaxPaid : totalTaxCalculated
+
   const totalExpenses = yearExpenses.reduce((s, e) => s + Number(e.amount || 0), 0)
   const netIncome     = revenueCollected - totalTax - totalExpenses
 
@@ -905,9 +914,15 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Occupancy Tax</p>
           <span className="text-sm font-bold text-gray-900">{fmt(totalTax)}</span>
         </div>
-        <p className="px-4 py-2.5 text-xs text-gray-400">
-          {((1 - 1 / TAX_DIVISOR) * 100).toFixed(2)}% of gross rent (taxable = rent ÷ {TAX_DIVISOR})
-        </p>
+        {isPastYear ? (
+          <p className="px-4 py-2.5 text-sm text-gray-700">
+            Total Occupancy Tax Paid: <span className="font-semibold">{fmt(totalTaxPaid)}</span>
+          </p>
+        ) : (
+          <p className="px-4 py-2.5 text-xs text-gray-400">
+            {((1 - 1 / TAX_DIVISOR) * 100).toFixed(2)}% of gross rent (taxable = rent ÷ {TAX_DIVISOR})
+          </p>
+        )}
       </div>
 
       {/* Expenses by category */}
