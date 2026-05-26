@@ -782,11 +782,17 @@ function OccupancyTaxTab({ weeks, selectedYear, taxPayments, onRefresh }) {
 
 // ─── YearEndReportTab ──────────────────────────────────────────────────────────
 
-function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
+function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRentals = [] }) {
   const currentYear = new Date().getFullYear()
   const isPastYear  = selectedYear < currentYear
 
-  const allEntries = getRenterEntries(weeks)
+  // Past years: use allRentals (all seasons) filtered by season_year
+  // Current year: use weeks (resolved 2026 calendar with payment data)
+  const yearRentals = isPastYear
+    ? allRentals.filter(r => r.season_year === selectedYear)
+    : []
+
+  const allEntries  = getRenterEntries(weeks)
   const yearEntries = allEntries.filter(e => {
     const end = e.renterInfo?.dates?.end || e.endDate
     if (!end) return false
@@ -794,17 +800,38 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
     return d.getFullYear() === selectedYear
   })
 
+  // Normalised income rows — same shape for both paths
+  const fmtLocalDate = isoStr => {
+    if (!isoStr) return null
+    const [y, m, d] = isoStr.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  const incomeRows = isPastYear
+    ? yearRentals.map(r => ({
+        name:       r.renters?.name || 'Unknown',
+        startDate:  fmtLocalDate(r.start_date),
+        endDate:    fmtLocalDate(r.end_date),
+        totalRent:  Number(r.total_rent || 0),
+        collected:  Number(r.payment1_amount || 0) + Number(r.payment2_amount || 0) + Number(r.payment3_amount || 0),
+      }))
+    : yearEntries.map(e => {
+        const start = e.renterInfo?.dates?.start
+        const end   = e.renterInfo?.dates?.end
+        return {
+          name:      e.name,
+          startDate: start instanceof Date ? start : null,
+          endDate:   end   instanceof Date ? end   : null,
+          totalRent: e.totalRent || 0,
+          collected: (e.depositActual?.amount || 0) + (e.payment2Actual?.amount || 0) + (e.finalActual?.amount || 0),
+        }
+      })
+
   const yearExpenses = expenses.filter(e => {
     return e.date ? parseInt(e.date.split('-')[0]) === selectedYear : false
   })
 
-  const revenueContracted = yearEntries.reduce((s, e) => s + (e.totalRent || 0), 0)
-  const revenueCollected  = yearEntries.reduce((s, e) => {
-    const paid1 = e.depositActual?.amount  || 0
-    const paid2 = e.payment2Actual?.amount || 0
-    const paid3 = e.finalActual?.amount    || 0
-    return s + paid1 + paid2 + paid3
-  }, 0)
+  const revenueContracted  = incomeRows.reduce((s, r) => s + r.totalRent, 0)
+  const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0)
   const outstandingBalance = revenueContracted - revenueCollected
 
   const totalTaxCalculated = yearEntries.reduce((s, e) => s + taxForEntry(e), 0)
@@ -861,33 +888,28 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Rental Income</p>
         </div>
-        {yearEntries.length === 0 ? (
+        {incomeRows.length === 0 ? (
           <p className="px-4 py-3 text-sm text-gray-400">No rentals for {selectedYear}</p>
         ) : (
           <>
-            {yearEntries.map((e, i) => {
-              const start = e.renterInfo?.dates?.start
-              const end   = e.renterInfo?.dates?.end
-              const collected = (e.depositActual?.amount || 0) + (e.payment2Actual?.amount || 0) + (e.finalActual?.amount || 0)
-              return (
-                <div key={i} className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between items-baseline">
-                  <div>
-                    <p className="text-sm text-gray-800">{e.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {start instanceof Date ? start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                      {' – '}
-                      {end instanceof Date ? end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{fmt(e.totalRent)}</p>
-                    {collected < (e.totalRent || 0) && (
-                      <p className="text-xs text-gray-400">{fmt(collected)} collected</p>
-                    )}
-                  </div>
+            {incomeRows.map((row, i) => (
+              <div key={i} className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between items-baseline">
+                <div>
+                  <p className="text-sm text-gray-800">{row.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {row.startDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''}
+                    {' – '}
+                    {row.endDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''}
+                  </p>
                 </div>
-              )
-            })}
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{fmt(row.totalRent)}</p>
+                  {row.collected < row.totalRent && (
+                    <p className="text-xs text-gray-400">{fmt(row.collected)} collected</p>
+                  )}
+                </div>
+              </div>
+            ))}
             <div className="border-t border-gray-100">
               <div className="px-4 py-2.5 flex justify-between items-baseline">
                 <span className="text-sm text-gray-600">Revenue Contracted</span>
@@ -963,7 +985,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments }) {
 
 // ─── FinancialsScreen ──────────────────────────────────────────────────────────
 
-export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments, onRefreshFinancials }) {
+export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments, allRentals = [], onRefreshFinancials }) {
   const [visible, setVisible] = useState(false)
   const [activeTab, setActiveTab] = useState('expenses')
 
@@ -1070,6 +1092,7 @@ export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments
               expenses={expenses}
               selectedYear={selectedYear}
               taxPayments={taxPayments}
+              allRentals={allRentals}
             />
           )}
         </div>

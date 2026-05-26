@@ -56,6 +56,7 @@ export default function App() {
   const [completedTasks, setCompletedTasks] = useState([])
   const [ownerLockCode, setOwnerLockCode] = useState('')
   const [lockboxCode, setLockboxCode]     = useState('')
+  const [allRentals, setAllRentals]       = useState([])
 
   const showDemoToast = useCallback(() => {
     setDemoToast(true)
@@ -78,7 +79,7 @@ export default function App() {
     }
     try {
       if (USE_SUPABASE_RENTALS) {
-        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] =
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp, allRentalsResp] =
           await Promise.all([
             supabase.from('rentals').select('*').eq('season_year', 2026),
             supabase.from('renters').select('*'),
@@ -93,6 +94,7 @@ export default function App() {
             supabase.from('tasks').select('*').is('completed_at', null).order('due_date', { ascending: true, nullsFirst: false }),
             supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
             supabase.from('property_settings').select('key, value').in('key', ['owner_lock_code', 'lockbox_code']),
+            supabase.from('rentals').select('*, renters(name, email)'),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
@@ -115,6 +117,7 @@ export default function App() {
         const propByKey = Object.fromEntries((lockCodeResp.data || []).map(r => [r.key, r.value]))
         setOwnerLockCode(propByKey['owner_lock_code'] || '')
         setLockboxCode(propByKey['lockbox_code'] || '')
+        setAllRentals(allRentalsResp.data || [])
       } else {
         // CSV fallback path
         const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] = await Promise.all([
@@ -203,12 +206,14 @@ export default function App() {
 
   const refreshFinancials = useCallback(async () => {
     if (isDemo) return
-    const [expResp, taxResp] = await Promise.all([
+    const [expResp, taxResp, allRentalsResp] = await Promise.all([
       supabase.from('expenses').select('*').order('date'),
       supabase.from('occupancy_tax_payments').select('*'),
+      supabase.from('rentals').select('*, renters(name, email)'),
     ])
     setExpenses(expResp.data || [])
     setTaxPayments(taxResp.data || [])
+    setAllRentals(allRentalsResp.data || [])
   }, [])
 
   // Merge Supabase payment records into weeks (Supabase takes precedence over embedded data)
@@ -469,6 +474,7 @@ export default function App() {
           weeks={resolvedWeeks}
           expenses={expenses}
           taxPayments={taxPayments}
+          allRentals={allRentals}
           onRefreshFinancials={refreshFinancials}
         />
       )}
