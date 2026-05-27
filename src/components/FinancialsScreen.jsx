@@ -838,10 +838,13 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
     e.date ? parseInt(e.date.split('-')[0]) === selectedYear : false
   )
 
+  const normalizeCategory = (cat) =>
+    cat ? cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase() : 'Miscellaneous'
+
   // expenses grouped by category with individual rows for detail view
   const expensesByCategory = {}
   for (const exp of yearExpenses) {
-    const cat = exp.category || 'Other'
+    const cat = normalizeCategory(exp.category)
     if (!expensesByCategory[cat]) expensesByCategory[cat] = { total: 0, rows: [] }
     expensesByCategory[cat].total += Number(exp.amount)
     expensesByCategory[cat].rows.push(exp)
