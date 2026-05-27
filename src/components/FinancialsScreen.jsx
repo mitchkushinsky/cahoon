@@ -866,35 +866,55 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
 
   function exportCSV() {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const rows = [['Type', 'Description', 'Amount', 'Date', 'Paid To']]
+    const row = (...cols) => cols.map(q).join(',')
+    const blank = () => ''
+    const rows = []
 
     if (view === 'detail') {
-      for (const row of incomeRows) {
-        rows.push(['Renter', `${row.name} (${fmtShort(row.startDate)}–${fmtShort(row.endDate)})`, row.totalRent.toFixed(2), '', ''])
+      rows.push(row('RENTAL INCOME'))
+      rows.push(row('Type', 'Name', 'Dates', 'Contracted', 'Collected'))
+      for (const r of incomeRows) {
+        const dates = `${fmtShort(r.startDate)} - ${fmtShort(r.endDate)}`
+        rows.push(row('Renter', r.name, dates, r.totalRent.toFixed(2), r.collected.toFixed(2)))
       }
-    }
-    rows.push(['Income', 'Revenue Contracted', revenueContracted.toFixed(2), '', ''])
-    rows.push(['Income', 'Revenue Collected',  revenueCollected.toFixed(2),  '', ''])
-    if (outstandingBalance > 0.01)
-      rows.push(['Income', 'Outstanding Balance', outstandingBalance.toFixed(2), '', ''])
-    rows.push(['Tax', 'Occupancy Tax', (-totalTax).toFixed(2), '', ''])
+      rows.push(row(blank(), 'Revenue Contracted', blank(), blank(), revenueContracted.toFixed(2)))
+      rows.push(row(blank(), 'Revenue Collected',  blank(), blank(), revenueCollected.toFixed(2)))
+      rows.push(row(blank(), 'Outstanding Balance', blank(), blank(), outstandingBalance.toFixed(2)))
+      rows.push('')
 
-    if (view === 'detail') {
-      for (const [cat, { rows: exps }] of sortedCats) {
+      rows.push(row('OCCUPANCY TAX'))
+      rows.push(row('Type', 'Description', 'Amount'))
+      rows.push(row('Tax', 'Occupancy Tax', (-totalTax).toFixed(2)))
+      rows.push('')
+
+      rows.push(row('EXPENSES'))
+      rows.push(row('Category', 'Payee', 'Description', 'Date', 'Amount'))
+      for (const [cat, { total, rows: exps }] of sortedCats) {
         for (const exp of [...exps].sort((a, b) => (a.date < b.date ? -1 : 1))) {
-          const desc = [exp.description, exp.paid_to].filter(Boolean).join(' · ')
-          rows.push(['Expense', `${cat}: ${desc}`, (-Number(exp.amount)).toFixed(2), exp.date || '', exp.paid_to || ''])
+          rows.push(row(cat, exp.paid_to || blank(), exp.description || blank(), exp.date || blank(), (-Number(exp.amount)).toFixed(2)))
         }
+        rows.push(row(blank(), blank(), `${cat} Total`, blank(), (-total).toFixed(2)))
       }
-    } else {
-      for (const [cat, { total }] of sortedCats) {
-        rows.push(['Expense', cat, (-total).toFixed(2), '', ''])
-      }
-    }
-    rows.push(['Net', 'Net Income', netIncome.toFixed(2), '', ''])
+      rows.push(row(blank(), blank(), 'Total Expenses', blank(), (-totalExpenses).toFixed(2)))
+      rows.push('')
 
-    const csv = rows.map(r => r.map(q).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
+      rows.push(row('NET INCOME'))
+      rows.push(row(blank(), blank(), `Net Income ${selectedYear}`, blank(), netIncome.toFixed(2)))
+    } else {
+      rows.push(row('Type', 'Description', 'Amount'))
+      rows.push(row('Income', 'Revenue Contracted', revenueContracted.toFixed(2)))
+      rows.push(row('Income', 'Revenue Collected',  revenueCollected.toFixed(2)))
+      rows.push(row('Income', 'Outstanding Balance', outstandingBalance.toFixed(2)))
+      rows.push(row('Tax', 'Occupancy Tax', (-totalTax).toFixed(2)))
+      for (const [cat, { total }] of sortedCats) {
+        rows.push(row('Expense', cat, (-total).toFixed(2)))
+      }
+      rows.push(row('Expense', 'Total Expenses', (-totalExpenses).toFixed(2)))
+      rows.push(row('Net', `Net Income ${selectedYear}`, netIncome.toFixed(2)))
+    }
+
+    const csv = rows.join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
