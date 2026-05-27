@@ -13,6 +13,10 @@ function fmtDate(isoStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function fmtMoney(n) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n ?? 0)
+}
+
 async function upsertRenterAndRental(entry, seasonYear, existingRentalId = null) {
   const email = (entry.email || '').toLowerCase().trim()
   let renterId
@@ -77,10 +81,9 @@ async function upsertRenterAndRental(entry, seasonYear, existingRentalId = null)
 // ─── RentersTab ───────────────────────────────────────────────────────────────
 
 function RenterForm({ initial = {}, onSave, onCancel, saving }) {
-  const [name, setName] = useState(initial.name || '')
-  const [email, setEmail] = useState(initial.email || '')
+  const [name, setName]           = useState(initial.name || '')
+  const [email, setEmail]         = useState(initial.email || '')
   const [firstYear, setFirstYear] = useState(initial.first_year_rented || '')
-  const [notes, setNotes] = useState(initial.notes || '')
 
   return (
     <div className="border border-blue-200 rounded-xl p-4 space-y-3 bg-blue-50">
@@ -105,13 +108,6 @@ function RenterForm({ initial = {}, onSave, onCancel, saving }) {
         onChange={e => setFirstYear(e.target.value)}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
       />
-      <textarea
-        placeholder="Notes (optional)"
-        value={notes}
-        onChange={e => setNotes(e.target.value)}
-        rows={2}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 resize-none bg-white"
-      />
       <div className="flex gap-2">
         <button
           onClick={onCancel}
@@ -120,7 +116,7 @@ function RenterForm({ initial = {}, onSave, onCancel, saving }) {
           Cancel
         </button>
         <button
-          onClick={() => onSave({ name: name.trim(), email: email.trim() || null, first_year_rented: firstYear ? Number(firstYear) : null, notes: notes.trim() || null })}
+          onClick={() => onSave({ name: name.trim(), email: email.trim() || null, first_year_rented: firstYear ? Number(firstYear) : null })}
           disabled={!name.trim() || saving}
           className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
         >
@@ -131,29 +127,20 @@ function RenterForm({ initial = {}, onSave, onCancel, saving }) {
   )
 }
 
-function RenterRow({ renter, onUpdated, onDeleted }) {
-  const [editing, setEditing]           = useState(false)
-  const [saving, setSaving]             = useState(false)
-  const [checkingDelete, setChecking]   = useState(false)
-  const [deleteError, setDeleteError]   = useState(null)
+function RenterRow({ renter, onSelect, onUpdated, onDeleted }) {
+  const [checkingDelete, setChecking]     = useState(false)
+  const [deleteError, setDeleteError]     = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
-  const [acting, setActing]             = useState(false)
+  const [acting, setActing]               = useState(false)
 
   const isArchived = !!renter.archived_at
 
-  const handleSave = async (fields) => {
-    setSaving(true)
-    const { error } = await supabase.from('renters').update(fields).eq('id', renter.id)
-    setSaving(false)
-    if (!error) { setEditing(false); onUpdated() }
-  }
-
-  const handleTrashClick = async () => {
+  const handleTrashClick = async (e) => {
+    e.stopPropagation()
     setDeleteError(null)
     setConfirmDelete(false)
     setConfirmArchive(false)
-    setEditing(false)
     setChecking(true)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -189,7 +176,8 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
     onDeleted()
   }
 
-  const handleRestore = async () => {
+  const handleRestore = async (e) => {
+    e.stopPropagation()
     setActing(true)
     await supabase.from('renters').update({ archived_at: null }).eq('id', renter.id)
     setActing(false)
@@ -198,8 +186,10 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
-      {/* Row */}
-      <div className="flex items-center px-4 py-3 gap-3">
+      <div
+        className={`flex items-center px-4 py-3 gap-3 ${!isArchived ? 'cursor-pointer hover:bg-gray-50' : ''} transition-colors`}
+        onClick={() => !isArchived && onSelect(renter, false)}
+      >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-medium text-gray-900">{renter.name}</p>
@@ -222,9 +212,9 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
             {acting ? '…' : 'Restore'}
           </button>
         ) : (
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
             <button
-              onClick={() => { setEditing(v => !v); setConfirmDelete(false); setConfirmArchive(false); setDeleteError(null) }}
+              onClick={() => onSelect(renter, true)}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
               title="Edit renter"
             >
@@ -242,34 +232,16 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
         )}
       </div>
 
-      {/* Edit form */}
-      {editing && !isArchived && (
-        <div className="border-t border-gray-100 px-4 pb-4 pt-3 bg-gray-50">
-          <RenterForm
-            initial={renter}
-            onSave={handleSave}
-            onCancel={() => setEditing(false)}
-            saving={saving}
-          />
-        </div>
-      )}
-
-      {/* Delete error */}
       {deleteError && (
         <div className="border-t border-red-100 px-4 pb-4 pt-3 bg-red-50 space-y-2">
           <p className="text-sm text-red-700">{deleteError}</p>
-          <button onClick={() => setDeleteError(null)} className="text-xs text-gray-500 hover:underline">
-            Dismiss
-          </button>
+          <button onClick={() => setDeleteError(null)} className="text-xs text-gray-500 hover:underline">Dismiss</button>
         </div>
       )}
 
-      {/* Archive confirmation */}
       {confirmArchive && (
         <div className="border-t border-amber-100 px-4 pb-4 pt-3 bg-amber-50 space-y-3">
-          <p className="text-sm text-amber-800">
-            This renter has past rental records. Archive them instead of deleting?
-          </p>
+          <p className="text-sm text-amber-800">This renter has past rental records. Archive them instead of deleting?</p>
           <div className="flex gap-2">
             <button
               onClick={() => setConfirmArchive(false)}
@@ -288,12 +260,9 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
         </div>
       )}
 
-      {/* Hard delete confirmation */}
       {confirmDelete && (
         <div className="border-t border-red-100 px-4 pb-4 pt-3 bg-red-50 space-y-3">
-          <p className="text-sm text-red-800">
-            Delete {renter.name} permanently? This cannot be undone.
-          </p>
+          <p className="text-sm text-red-800">Delete {renter.name} permanently? This cannot be undone.</p>
           <div className="flex gap-2">
             <button
               onClick={() => setConfirmDelete(false)}
@@ -315,12 +284,194 @@ function RenterRow({ renter, onUpdated, onDeleted }) {
   )
 }
 
+function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdated }) {
+  const [renter, setRenter]               = useState(initialRenter)
+  const [rentals, setRentals]             = useState([])
+  const [comments, setComments]           = useState({})
+  const [loading, setLoading]             = useState(true)
+  const [editing, setEditing]             = useState(startInEditMode || false)
+  const [saving, setSaving]               = useState(false)
+  const [notes, setNotes]                 = useState(initialRenter.notes || '')
+  const [notesSaved, setNotesSaved]       = useState(false)
+  const [expandedYears, setExpandedYears] = useState(new Set())
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const { data: rd } = await supabase
+        .from('rentals')
+        .select('*')
+        .eq('renter_id', renter.id)
+        .order('season_year', { ascending: false })
+      if (cancelled) return
+      const rows = rd || []
+      const startDates = rows.map(r => r.start_date).filter(Boolean)
+      let commentMap = {}
+      if (startDates.length > 0) {
+        const { data: cd } = await supabase
+          .from('comment_overrides')
+          .select('week_start, comment')
+          .in('week_start', startDates)
+        for (const c of (cd || [])) {
+          if (c.comment) commentMap[c.week_start] = c.comment
+        }
+      }
+      if (!cancelled) { setRentals(rows); setComments(commentMap); setLoading(false) }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [renter.id])
+
+  const handleEditSave = async (fields) => {
+    setSaving(true)
+    await supabase.from('renters').update(fields).eq('id', renter.id)
+    const updated = { ...renter, ...fields }
+    setRenter(updated)
+    setSaving(false)
+    setEditing(false)
+    onUpdated(updated)
+  }
+
+  const saveNotes = async () => {
+    const trimmed = notes.trim() || null
+    await supabase.from('renters').update({ notes: trimmed }).eq('id', renter.id)
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2000)
+    onUpdated({ ...renter, notes: trimmed })
+  }
+
+  const toggleYear = year => setExpandedYears(prev => {
+    const next = new Set(prev)
+    next.has(year) ? next.delete(year) : next.add(year)
+    return next
+  })
+
+  const rentalsByYear = {}
+  for (const r of rentals) {
+    if (!rentalsByYear[r.season_year]) rentalsByYear[r.season_year] = []
+    rentalsByYear[r.season_year].push(r)
+  }
+  const yearsWithComments = Object.entries(rentalsByYear)
+    .filter(([, rs]) => rs.some(r => comments[r.start_date]))
+    .map(([y]) => Number(y))
+    .sort((a, b) => b - a)
+
+  const totalRent   = rentals.reduce((s, r) => s + Number(r.total_rent || 0), 0)
+  const seasonCount = new Set(rentals.map(r => r.season_year)).size
+
+  return (
+    <div className="px-4 py-4 space-y-6">
+      <button onClick={onBack} className="text-blue-600 text-sm font-medium hover:text-blue-800 flex items-center gap-1">
+        ← All Renters
+      </button>
+
+      {editing ? (
+        <RenterForm initial={renter} onSave={handleEditSave} onCancel={() => setEditing(false)} saving={saving} />
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 leading-tight">{renter.name}</h2>
+            {renter.email && (
+              <a href={`mailto:${renter.email}`} className="text-sm text-blue-600 hover:underline block mt-0.5">
+                {renter.email}
+              </a>
+            )}
+            {renter.first_year_rented && (
+              <p className="text-sm text-gray-500 mt-0.5">Since {renter.first_year_rented}</p>
+            )}
+          </div>
+          <button
+            onClick={() => setEditing(true)}
+            className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors flex-shrink-0 mt-1"
+          >
+            ✏️
+          </button>
+        </div>
+      )}
+
+      {/* Rental History */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Rental History</h3>
+        {loading ? (
+          <div className="flex justify-center py-4">
+            <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+          </div>
+        ) : rentals.length === 0 ? (
+          <p className="text-sm text-gray-400">No rental history found.</p>
+        ) : (
+          <div className="bg-gray-50 rounded-xl overflow-hidden">
+            {rentals.map((r, i) => (
+              <div key={r.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                <span className="text-gray-400 w-10 flex-shrink-0">{r.season_year}</span>
+                <span className="flex-1 text-gray-700">
+                  {r.start_date && r.end_date ? `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}` : '—'}
+                </span>
+                <span className="font-medium text-gray-900">{r.total_rent ? fmtMoney(r.total_rent) : '—'}</span>
+              </div>
+            ))}
+            <div className="border-t border-gray-200 px-4 py-2.5 flex items-center justify-between text-sm bg-white">
+              <span className="text-gray-500">{seasonCount} season{seasonCount !== 1 ? 's' : ''}</span>
+              <span className="font-semibold text-gray-900">{fmtMoney(totalRent)} total rent</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Per-Year Comments */}
+      {!loading && yearsWithComments.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes by Year</h3>
+          <div className="space-y-1.5">
+            {yearsWithComments.map(year => {
+              const comment = (rentalsByYear[year] || []).map(r => comments[r.start_date]).find(Boolean) || ''
+              const isExpanded = expandedYears.has(year)
+              return (
+                <div key={year} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => toggleYear(year)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-xs text-gray-400 w-3 flex-shrink-0">{isExpanded ? '▼' : '▶'}</span>
+                    <span className="text-sm font-medium text-gray-800 flex-shrink-0 w-12">{year}</span>
+                    {!isExpanded && <span className="text-sm text-gray-400 truncate">— "{comment}"</span>}
+                  </button>
+                  {isExpanded && (
+                    <div className="px-3 pb-3">
+                      <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">{comment}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Renter Notes */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Renter Notes</h3>
+        <textarea
+          value={notes}
+          onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
+          rows={3}
+          placeholder="Notes about this renter across all seasons…"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-400 resize-none"
+        />
+        <button onClick={saveNotes} className="text-sm font-medium text-blue-600 hover:underline mt-1">
+          {notesSaved ? '✓ Saved' : 'Save Notes'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RentersTab() {
-  const [renters, setRenters]         = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [adding, setAdding]           = useState(false)
-  const [saving, setSaving]           = useState(false)
+  const [renters, setRenters]           = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [adding, setAdding]             = useState(false)
+  const [saving, setSaving]             = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [selected, setSelected]         = useState(null) // { renter, editMode }
 
   const load = async (archived) => {
     setLoading(true)
@@ -341,12 +492,29 @@ function RentersTab() {
     load(showArchived)
   }
 
+  const handleUpdated = (updatedRenter) => {
+    load(showArchived)
+    if (selected && updatedRenter) {
+      setSelected(prev => ({ ...prev, renter: updatedRenter }))
+    }
+  }
+
+  if (selected) {
+    return (
+      <RenterProfile
+        renter={selected.renter}
+        startInEditMode={selected.editMode}
+        onBack={() => setSelected(null)}
+        onUpdated={handleUpdated}
+      />
+    )
+  }
+
   const activeRenters   = renters.filter(r => !r.archived_at)
   const archivedRenters = renters.filter(r => r.archived_at)
 
   return (
     <div className="px-4 py-4 space-y-3">
-      {/* Toolbar */}
       <div className="flex items-center justify-end">
         <button
           onClick={() => setShowArchived(v => !v)}
@@ -370,11 +538,7 @@ function RentersTab() {
       )}
 
       {adding && (
-        <RenterForm
-          onSave={handleAdd}
-          onCancel={() => setAdding(false)}
-          saving={saving}
-        />
+        <RenterForm onSave={handleAdd} onCancel={() => setAdding(false)} saving={saving} />
       )}
 
       {loading && (
@@ -389,7 +553,13 @@ function RentersTab() {
 
       <div className="space-y-2">
         {activeRenters.map(r => (
-          <RenterRow key={r.id} renter={r} onUpdated={() => load(showArchived)} onDeleted={() => load(showArchived)} />
+          <RenterRow
+            key={r.id}
+            renter={r}
+            onSelect={(renter, editMode) => setSelected({ renter, editMode })}
+            onUpdated={() => load(showArchived)}
+            onDeleted={() => load(showArchived)}
+          />
         ))}
       </div>
 
@@ -397,7 +567,13 @@ function RentersTab() {
         <div className="space-y-2 pt-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Archived</p>
           {archivedRenters.map(r => (
-            <RenterRow key={r.id} renter={r} onUpdated={() => load(showArchived)} onDeleted={() => load(showArchived)} />
+            <RenterRow
+              key={r.id}
+              renter={r}
+              onSelect={(renter, editMode) => setSelected({ renter, editMode })}
+              onUpdated={() => load(showArchived)}
+              onDeleted={() => load(showArchived)}
+            />
           ))}
         </div>
       )}
