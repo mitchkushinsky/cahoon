@@ -783,11 +783,18 @@ function OccupancyTaxTab({ weeks, selectedYear, taxPayments, onRefresh }) {
 // ─── YearEndReportTab ──────────────────────────────────────────────────────────
 
 function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRentals = [] }) {
+  const [view, setView]               = useState('summary') // 'summary' | 'detail'
+  const [collapsedCats, setCollapsedCats] = useState(new Set())
+
+  const toggleCat = (cat) => setCollapsedCats(prev => {
+    const next = new Set(prev)
+    next.has(cat) ? next.delete(cat) : next.add(cat)
+    return next
+  })
+
   const currentYear = new Date().getFullYear()
   const isPastYear  = selectedYear < currentYear
 
-  // Past years: use allRentals (all seasons) filtered by season_year
-  // Current year: use weeks (resolved 2026 calendar with payment data)
   const yearRentals = isPastYear
     ? allRentals.filter(r => r.season_year === selectedYear)
     : []
@@ -800,19 +807,20 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
     return d.getFullYear() === selectedYear
   })
 
-  // Normalised income rows — same shape for both paths
   const fmtLocalDate = isoStr => {
     if (!isoStr) return null
     const [y, m, d] = isoStr.split('-').map(Number)
     return new Date(y, m - 1, d)
   }
+  const fmtShort = d => d?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''
+
   const incomeRows = isPastYear
     ? yearRentals.map(r => ({
-        name:       r.renters?.name || 'Unknown',
-        startDate:  fmtLocalDate(r.start_date),
-        endDate:    fmtLocalDate(r.end_date),
-        totalRent:  Number(r.total_rent || 0),
-        collected:  Number(r.payment1_amount || 0) + Number(r.payment2_amount || 0) + Number(r.payment3_amount || 0),
+        name:      r.renters?.name || 'Unknown',
+        startDate: fmtLocalDate(r.start_date),
+        endDate:   fmtLocalDate(r.end_date),
+        totalRent: Number(r.total_rent || 0),
+        collected: Number(r.payment1_amount || 0) + Number(r.payment2_amount || 0) + Number(r.payment3_amount || 0),
       }))
     : yearEntries.map(e => {
         const start = e.renterInfo?.dates?.start
@@ -826,9 +834,19 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
         }
       })
 
-  const yearExpenses = expenses.filter(e => {
-    return e.date ? parseInt(e.date.split('-')[0]) === selectedYear : false
-  })
+  const yearExpenses = expenses.filter(e =>
+    e.date ? parseInt(e.date.split('-')[0]) === selectedYear : false
+  )
+
+  // expenses grouped by category with individual rows for detail view
+  const expensesByCategory = {}
+  for (const exp of yearExpenses) {
+    const cat = exp.category || 'Other'
+    if (!expensesByCategory[cat]) expensesByCategory[cat] = { total: 0, rows: [] }
+    expensesByCategory[cat].total += Number(exp.amount)
+    expensesByCategory[cat].rows.push(exp)
+  }
+  const sortedCats = Object.entries(expensesByCategory).sort((a, b) => b[1].total - a[1].total)
 
   const revenueContracted  = incomeRows.reduce((s, r) => s + r.totalRent, 0)
   const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0)
@@ -838,52 +856,94 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   const totalTaxPaid = taxPayments
     .filter(p => p.period_month && parseInt(p.period_month.split('-')[0]) === selectedYear)
     .reduce((s, p) => s + Number(p.amount || 0), 0)
-  const totalTax    = isPastYear ? totalTaxPaid : totalTaxCalculated
+  const totalTax  = isPastYear ? totalTaxPaid : totalTaxCalculated
 
   const totalExpenses = yearExpenses.reduce((s, e) => s + Number(e.amount || 0), 0)
   const netIncome     = revenueCollected - totalTax - totalExpenses
 
-  // Expenses grouped by category
-  const byCategory = {}
-  for (const exp of yearExpenses) {
-    const cat = exp.category || 'Other'
-    byCategory[cat] = (byCategory[cat] || 0) + Number(exp.amount)
-  }
-
   function exportCSV() {
-    const rows = [
-      ['Type', 'Description', 'Amount'],
-      ['Income', 'Revenue Contracted', revenueContracted.toFixed(2)],
-      ['Income', 'Revenue Collected', revenueCollected.toFixed(2)],
-      ['Income', 'Outstanding Balance', outstandingBalance.toFixed(2)],
-      ['Tax', 'Occupancy Tax', (-totalTax).toFixed(2)],
-      ...Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
-        ['Expense', cat, (-amt).toFixed(2)]
-      )),
-      ['Net', 'Net Income', netIncome.toFixed(2)],
-    ]
-    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = [['Type', 'Description', 'Amount', 'Date', 'Paid To']]
+
+    if (view === 'detail') {
+      for (const row of incomeRows) {
+        rows.push(['Renter', `${row.name} (${fmtShort(row.startDate)}–${fmtShort(row.endDate)})`, row.totalRent.toFixed(2), '', ''])
+      }
+    }
+    rows.push(['Income', 'Revenue Contracted', revenueContracted.toFixed(2), '', ''])
+    rows.push(['Income', 'Revenue Collected',  revenueCollected.toFixed(2),  '', ''])
+    if (outstandingBalance > 0.01)
+      rows.push(['Income', 'Outstanding Balance', outstandingBalance.toFixed(2), '', ''])
+    rows.push(['Tax', 'Occupancy Tax', (-totalTax).toFixed(2), '', ''])
+
+    if (view === 'detail') {
+      for (const [cat, { rows: exps }] of sortedCats) {
+        for (const exp of [...exps].sort((a, b) => (a.date < b.date ? -1 : 1))) {
+          const desc = [exp.description, exp.paid_to].filter(Boolean).join(' · ')
+          rows.push(['Expense', `${cat}: ${desc}`, (-Number(exp.amount)).toFixed(2), exp.date || '', exp.paid_to || ''])
+        }
+      }
+    } else {
+      for (const [cat, { total }] of sortedCats) {
+        rows.push(['Expense', cat, (-total).toFixed(2), '', ''])
+      }
+    }
+    rows.push(['Net', 'Net Income', netIncome.toFixed(2), '', ''])
+
+    const csv = rows.map(r => r.map(q).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `cahoon-${selectedYear}-report.csv`
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `cahoon-${selectedYear}-${view}-report.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
+  const incomeTotals = (
+    <div className={view === 'detail' && incomeRows.length > 0 ? 'border-t border-gray-100' : ''}>
+      <div className="px-4 py-2.5 flex justify-between items-baseline">
+        <span className="text-sm text-gray-600">Revenue Contracted</span>
+        <span className="text-sm font-medium text-gray-900">{fmt(revenueContracted)}</span>
+      </div>
+      <div className="px-4 py-2.5 flex justify-between items-baseline">
+        <span className="text-sm text-gray-600">Revenue Collected</span>
+        <span className="text-sm font-medium text-gray-900">{fmt(revenueCollected)}</span>
+      </div>
+      {outstandingBalance > 0.01 && (
+        <div className="px-4 py-2.5 flex justify-between items-baseline">
+          <span className="text-sm text-red-600">Outstanding Balance</span>
+          <span className="text-sm font-medium text-red-600">{fmt(outstandingBalance)}</span>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={exportCSV}
-          className="text-sm text-blue-600 font-medium hover:underline"
-        >
+      {/* Toggle + Export */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+          {['summary', 'detail'].map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 font-medium capitalize transition-colors ${
+                view === v
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              } ${v === 'detail' ? 'border-l border-gray-200' : ''}`}
+            >
+              {v === 'summary' ? 'Summary' : 'Detail'}
+            </button>
+          ))}
+        </div>
+        <button onClick={exportCSV} className="text-sm text-blue-600 font-medium hover:underline">
           Export CSV
         </button>
       </div>
 
-      {/* Income */}
+      {/* Rental Income */}
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden mb-3">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Rental Income</p>
@@ -892,15 +952,11 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
           <p className="px-4 py-3 text-sm text-gray-400">No rentals for {selectedYear}</p>
         ) : (
           <>
-            {incomeRows.map((row, i) => (
+            {view === 'detail' && incomeRows.map((row, i) => (
               <div key={i} className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between items-baseline">
                 <div>
                   <p className="text-sm text-gray-800">{row.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {row.startDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''}
-                    {' – '}
-                    {row.endDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''}
-                  </p>
+                  <p className="text-xs text-gray-400">{fmtShort(row.startDate)} – {fmtShort(row.endDate)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">{fmt(row.totalRent)}</p>
@@ -910,22 +966,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
                 </div>
               </div>
             ))}
-            <div className="border-t border-gray-100">
-              <div className="px-4 py-2.5 flex justify-between items-baseline">
-                <span className="text-sm text-gray-600">Revenue Contracted</span>
-                <span className="text-sm font-medium text-gray-900">{fmt(revenueContracted)}</span>
-              </div>
-              <div className="px-4 py-2.5 flex justify-between items-baseline">
-                <span className="text-sm text-gray-600">Revenue Collected</span>
-                <span className="text-sm font-medium text-gray-900">{fmt(revenueCollected)}</span>
-              </div>
-              {outstandingBalance > 0.01 && (
-                <div className="px-4 py-2.5 flex justify-between items-baseline">
-                  <span className="text-sm text-red-600">Outstanding Balance</span>
-                  <span className="text-sm font-medium text-red-600">{fmt(outstandingBalance)}</span>
-                </div>
-              )}
-            </div>
+            {incomeTotals}
           </>
         )}
       </div>
@@ -936,30 +977,60 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Occupancy Tax</p>
           <span className="text-sm font-bold text-gray-900">{fmt(totalTax)}</span>
         </div>
-        {isPastYear ? (
-          <p className="px-4 py-2.5 text-sm text-gray-700">
-            Total Occupancy Tax Paid: <span className="font-semibold">{fmt(totalTaxPaid)}</span>
-          </p>
-        ) : (
-          <p className="px-4 py-2.5 text-xs text-gray-400">
-            {((1 - 1 / TAX_DIVISOR) * 100).toFixed(2)}% of gross rent (taxable = rent ÷ {TAX_DIVISOR})
-          </p>
-        )}
+        <p className="px-4 py-2.5 text-xs text-gray-400">
+          {isPastYear
+            ? 'Sum of recorded tax payments for this year'
+            : `${((1 - 1 / TAX_DIVISOR) * 100).toFixed(2)}% of gross rent (taxable = rent ÷ ${TAX_DIVISOR})`}
+        </p>
       </div>
 
-      {/* Expenses by category */}
+      {/* Expenses */}
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden mb-3">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Expenses by Category</p>
         </div>
-        {Object.keys(byCategory).length === 0 ? (
+        {sortedCats.length === 0 ? (
           <p className="px-4 py-3 text-sm text-gray-400">No expenses for {selectedYear}</p>
         ) : (
           <>
-            {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
-              <div key={cat} className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between">
-                <span className="text-sm text-gray-800">{cat}</span>
-                <span className="text-sm font-medium text-gray-900">{fmt(amt)}</span>
+            {sortedCats.map(([cat, { total, rows: exps }]) => (
+              <div key={cat}>
+                {view === 'summary' ? (
+                  <div className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between">
+                    <span className="text-sm text-gray-800">{cat}</span>
+                    <span className="text-sm font-medium text-gray-900">{fmt(total)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => toggleCat(cat)}
+                      className="w-full px-4 py-2.5 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <span className="text-sm text-gray-800 flex items-center gap-1.5">
+                        <span className="text-xs text-gray-400 w-3">{collapsedCats.has(cat) ? '▶' : '▼'}</span>
+                        {cat}
+                      </span>
+                      <span className="text-sm font-medium text-gray-900">{fmt(total)}</span>
+                    </button>
+                    {!collapsedCats.has(cat) && (
+                      <div className="bg-gray-50 border-b border-gray-100">
+                        {[...exps].sort((a, b) => (a.date < b.date ? -1 : 1)).map((exp, j) => (
+                          <div key={j} className="px-5 py-2 border-b border-gray-100 last:border-b-0 flex justify-between items-start gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs text-gray-700 truncate">
+                                {[exp.paid_to, exp.description].filter(Boolean).join(' · ') || '—'}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {exp.date ? fmtLocalDate(exp.date)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                              </p>
+                            </div>
+                            <span className="text-xs font-mono text-gray-700 flex-shrink-0">{fmt(exp.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
