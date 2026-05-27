@@ -80,7 +80,7 @@ async function upsertRenterAndRental(entry, seasonYear, existingRentalId = null)
 
 // ─── RentersTab ───────────────────────────────────────────────────────────────
 
-function RenterForm({ initial = {}, onSave, onCancel, saving }) {
+function RenterForm({ initial = {}, onSave, onCancel, saving, showEmail = false }) {
   const [name, setName]           = useState(initial.name || '')
   const [email, setEmail]         = useState(initial.email || '')
   const [firstYear, setFirstYear] = useState(initial.first_year_rented || '')
@@ -94,13 +94,15 @@ function RenterForm({ initial = {}, onSave, onCancel, saving }) {
         onChange={e => setName(e.target.value)}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
       />
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
-      />
+      {showEmail && (
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
+        />
+      )}
       <input
         type="number"
         placeholder="First Year Rented"
@@ -116,7 +118,7 @@ function RenterForm({ initial = {}, onSave, onCancel, saving }) {
           Cancel
         </button>
         <button
-          onClick={() => onSave({ name: name.trim(), email: email.trim() || null, first_year_rented: firstYear ? Number(firstYear) : null })}
+          onClick={() => onSave({ name: name.trim(), email: showEmail ? (email.trim() || null) : undefined, first_year_rented: firstYear ? Number(firstYear) : null })}
           disabled={!name.trim() || saving}
           className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors"
         >
@@ -198,7 +200,7 @@ function RenterRow({ renter, onSelect, onUpdated, onDeleted }) {
             )}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
-            {renter.email || 'No email'}
+            {renter.renter_emails?.find(e => e.is_primary)?.email || renter.email || 'No email'}
             {renter.first_year_rented ? ` · Since ${renter.first_year_rented}` : ''}
           </p>
         </div>
@@ -288,6 +290,7 @@ function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdat
   const [renter, setRenter]               = useState(initialRenter)
   const [rentals, setRentals]             = useState([])
   const [comments, setComments]           = useState({})
+  const [emails, setEmails]               = useState([])
   const [loading, setLoading]             = useState(true)
   const [editing, setEditing]             = useState(startInEditMode || false)
   const [saving, setSaving]               = useState(false)
@@ -295,28 +298,37 @@ function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdat
   const [notesSaved, setNotesSaved]       = useState(false)
   const [expandedYears, setExpandedYears] = useState(new Set())
 
+  // Email add state
+  const [addingEmail, setAddingEmail] = useState(false)
+  const [newEmail, setNewEmail]       = useState('')
+  const [emailSaving, setEmailSaving] = useState(false)
+
+  // Merge state
+  const [showMerge, setShowMerge]         = useState(false)
+  const [mergeSearch, setMergeSearch]     = useState('')
+  const [mergeRenters, setMergeRenters]   = useState([])
+  const [mergeTarget, setMergeTarget]     = useState(null)
+  const [mergeSaving, setMergeSaving]     = useState(false)
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const { data: rd } = await supabase
-        .from('rentals')
-        .select('*')
-        .eq('renter_id', renter.id)
-        .order('season_year', { ascending: false })
+      const [{ data: rd }, { data: emailData }] = await Promise.all([
+        supabase.from('rentals').select('*').eq('renter_id', renter.id).order('season_year', { ascending: false }),
+        supabase.from('renter_emails').select('*').eq('renter_id', renter.id).order('is_primary', { ascending: false }),
+      ])
       if (cancelled) return
       const rows = rd || []
       const startDates = rows.map(r => r.start_date).filter(Boolean)
       let commentMap = {}
       if (startDates.length > 0) {
         const { data: cd } = await supabase
-          .from('comment_overrides')
-          .select('week_start, comment')
-          .in('week_start', startDates)
+          .from('comment_overrides').select('week_start, comment').in('week_start', startDates)
         for (const c of (cd || [])) {
           if (c.comment) commentMap[c.week_start] = c.comment
         }
       }
-      if (!cancelled) { setRentals(rows); setComments(commentMap); setLoading(false) }
+      if (!cancelled) { setRentals(rows); setComments(commentMap); setEmails(emailData || []); setLoading(false) }
     }
     load()
     return () => { cancelled = true }
@@ -324,11 +336,13 @@ function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdat
 
   const handleEditSave = async (fields) => {
     setSaving(true)
-    await supabase.from('renters').update(fields).eq('id', renter.id)
-    const updated = { ...renter, ...fields }
+    const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined))
+    await supabase.from('renters').update(clean).eq('id', renter.id)
+    const updated = { ...renter, ...clean }
     setRenter(updated)
     setSaving(false)
     setEditing(false)
+    setShowMerge(false)
     onUpdated(updated)
   }
 
@@ -338,6 +352,77 @@ function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdat
     setNotesSaved(true)
     setTimeout(() => setNotesSaved(false), 2000)
     onUpdated({ ...renter, notes: trimmed })
+  }
+
+  const makePrimary = async (emailId, emailText) => {
+    await supabase.from('renter_emails').update({ is_primary: false }).eq('renter_id', renter.id)
+    await supabase.from('renter_emails').update({ is_primary: true }).eq('id', emailId)
+    await supabase.from('renters').update({ email: emailText }).eq('id', renter.id)
+    const updated = { ...renter, email: emailText }
+    setRenter(updated)
+    setEmails(prev => prev.map(e => ({ ...e, is_primary: e.id === emailId })))
+    onUpdated(updated)
+  }
+
+  const deleteEmail = async (emailId) => {
+    const target = emails.find(e => e.id === emailId)
+    await supabase.from('renter_emails').delete().eq('id', emailId)
+    const remaining = emails.filter(e => e.id !== emailId)
+    setEmails(remaining)
+    if (target?.is_primary) {
+      if (remaining.length > 0) {
+        await makePrimary(remaining[0].id, remaining[0].email)
+      } else {
+        await supabase.from('renters').update({ email: null }).eq('id', renter.id)
+        const updated = { ...renter, email: null }
+        setRenter(updated)
+        onUpdated(updated)
+      }
+    }
+  }
+
+  const addEmail = async () => {
+    const trimmed = newEmail.trim().toLowerCase()
+    if (!trimmed) return
+    setEmailSaving(true)
+    const isPrimary = emails.length === 0
+    const { data } = await supabase.from('renter_emails')
+      .insert({ renter_id: renter.id, email: trimmed, is_primary: isPrimary })
+      .select().single()
+    if (data) {
+      setEmails(prev => [...prev, data])
+      if (isPrimary) {
+        await supabase.from('renters').update({ email: trimmed }).eq('id', renter.id)
+        const updated = { ...renter, email: trimmed }
+        setRenter(updated)
+        onUpdated(updated)
+      }
+    }
+    setNewEmail('')
+    setAddingEmail(false)
+    setEmailSaving(false)
+  }
+
+  const loadMergeRenters = async () => {
+    const { data } = await supabase.from('renters').select('id, name').is('archived_at', null).order('name')
+    setMergeRenters((data || []).filter(r => r.id !== renter.id))
+  }
+
+  const executeMerge = async () => {
+    if (!mergeTarget) return
+    setMergeSaving(true)
+    await supabase.from('rentals').update({ renter_id: renter.id }).eq('renter_id', mergeTarget.id)
+    const { data: sourceEmails } = await supabase.from('renter_emails').select('*').eq('renter_id', mergeTarget.id)
+    const existingSet = new Set(emails.map(e => e.email.toLowerCase()))
+    for (const e of (sourceEmails || [])) {
+      if (!existingSet.has(e.email.toLowerCase())) {
+        await supabase.from('renter_emails').insert({ renter_id: renter.id, email: e.email, is_primary: false })
+      }
+    }
+    await supabase.from('renters').delete().eq('id', mergeTarget.id)
+    setMergeSaving(false)
+    onUpdated(renter)
+    onBack()
   }
 
   const toggleYear = year => setExpandedYears(prev => {
@@ -359,25 +444,138 @@ function RenterProfile({ renter: initialRenter, startInEditMode, onBack, onUpdat
   const totalRent   = rentals.reduce((s, r) => s + Number(r.total_rent || 0), 0)
   const seasonCount = new Set(rentals.map(r => r.season_year)).size
 
+  const filteredMergeRenters = mergeRenters.filter(r =>
+    r.name.toLowerCase().includes(mergeSearch.toLowerCase())
+  )
+
   return (
     <div className="px-4 py-4 space-y-6">
       <button onClick={onBack} className="text-blue-600 text-sm font-medium hover:text-blue-800 flex items-center gap-1">
         ← All Renters
       </button>
 
+      {/* Header — view vs edit */}
       {editing ? (
-        <RenterForm initial={renter} onSave={handleEditSave} onCancel={() => setEditing(false)} saving={saving} />
+        <div className="space-y-5">
+          <RenterForm initial={renter} onSave={handleEditSave} onCancel={() => { setEditing(false); setShowMerge(false) }} saving={saving} />
+
+          {/* Email editor (edit mode only) */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Email Addresses</h3>
+            <div className="space-y-2">
+              {emails.map(e => (
+                <div key={e.id} className="flex items-center gap-2">
+                  <span className="flex-1 text-sm text-gray-700 truncate">
+                    {e.is_primary && <span className="mr-1">⭐</span>}{e.email}
+                  </span>
+                  {!e.is_primary && (
+                    <button onClick={() => makePrimary(e.id, e.email)} className="text-xs text-blue-600 hover:underline flex-shrink-0">
+                      Make Primary
+                    </button>
+                  )}
+                  <button onClick={() => deleteEmail(e.id)} className="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 text-sm" title="Delete email">
+                    🗑️
+                  </button>
+                </div>
+              ))}
+
+              {addingEmail ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    placeholder="new@example.com"
+                    autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') addEmail(); if (e.key === 'Escape') { setAddingEmail(false); setNewEmail('') } }}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                  />
+                  <button onClick={addEmail} disabled={!newEmail.trim() || emailSaving} className="text-sm font-medium text-blue-600 hover:underline disabled:opacity-40">
+                    {emailSaving ? 'Adding…' : 'Add'}
+                  </button>
+                  <button onClick={() => { setAddingEmail(false); setNewEmail('') }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                </div>
+              ) : (
+                <button onClick={() => setAddingEmail(true)} className="text-sm text-blue-600 hover:underline">
+                  + Add Email
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Merge */}
+          {!showMerge ? (
+            <button
+              onClick={() => { setShowMerge(true); loadMergeRenters() }}
+              className="text-sm text-red-500 hover:text-red-700 hover:underline"
+            >
+              Merge with another renter…
+            </button>
+          ) : mergeTarget ? (
+            <div className="border border-red-200 rounded-xl p-4 bg-red-50 space-y-3">
+              <p className="text-sm font-semibold text-red-800">Confirm Merge</p>
+              <p className="text-sm text-red-700">
+                Merge <span className="font-semibold">{mergeTarget.name}</span> into{' '}
+                <span className="font-semibold">{renter.name}</span>? All rentals from{' '}
+                {mergeTarget.name} will be moved to {renter.name}. {mergeTarget.name} will be deleted.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setMergeTarget(null)} className="flex-1 py-2 rounded-lg text-sm border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={executeMerge} disabled={mergeSaving} className="flex-1 py-2 rounded-lg text-sm font-medium bg-red-600 text-white disabled:opacity-40 hover:bg-red-700 transition-colors">
+                  {mergeSaving ? 'Merging…' : 'Merge'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-700">Merge with another renter</p>
+                <button onClick={() => { setShowMerge(false); setMergeSearch('') }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+              </div>
+              <input
+                type="text"
+                placeholder="Search renters…"
+                value={mergeSearch}
+                onChange={e => setMergeSearch(e.target.value)}
+                autoFocus
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+              />
+              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                {filteredMergeRenters.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-2 text-center">No renters found</p>
+                ) : filteredMergeRenters.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setMergeTarget(r)}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    {r.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 leading-tight">{renter.name}</h2>
-            {renter.email && (
-              <a href={`mailto:${renter.email}`} className="text-sm text-blue-600 hover:underline block mt-0.5">
-                {renter.email}
-              </a>
-            )}
+            {loading ? null : emails.length > 0 ? (
+              <div className="mt-1 space-y-0.5">
+                {emails.map(e => (
+                  <div key={e.id} className="flex items-center gap-1">
+                    {e.is_primary && <span className="text-xs">⭐</span>}
+                    <a href={`mailto:${e.email}`} className="text-sm text-blue-600 hover:underline">{e.email}</a>
+                  </div>
+                ))}
+              </div>
+            ) : renter.email ? (
+              <a href={`mailto:${renter.email}`} className="text-sm text-blue-600 hover:underline block mt-0.5">{renter.email}</a>
+            ) : null}
             {renter.first_year_rented && (
-              <p className="text-sm text-gray-500 mt-0.5">Since {renter.first_year_rented}</p>
+              <p className="text-sm text-gray-500 mt-1">Since {renter.first_year_rented}</p>
             )}
           </div>
           <button
@@ -475,7 +673,7 @@ function RentersTab() {
 
   const load = async (archived) => {
     setLoading(true)
-    let query = supabase.from('renters').select('*').order('name')
+    let query = supabase.from('renters').select('*, renter_emails(id, email, is_primary)').order('name')
     if (!archived) query = query.is('archived_at', null)
     const { data } = await query
     setRenters(data || [])
@@ -486,7 +684,10 @@ function RentersTab() {
 
   const handleAdd = async (fields) => {
     setSaving(true)
-    await supabase.from('renters').insert(fields)
+    const { data: newRenter } = await supabase.from('renters').insert(fields).select('id').single()
+    if (fields.email && newRenter?.id) {
+      await supabase.from('renter_emails').insert({ renter_id: newRenter.id, email: fields.email.toLowerCase(), is_primary: true })
+    }
     setSaving(false)
     setAdding(false)
     load(showArchived)
@@ -538,7 +739,7 @@ function RentersTab() {
       )}
 
       {adding && (
-        <RenterForm onSave={handleAdd} onCancel={() => setAdding(false)} saving={saving} />
+        <RenterForm onSave={handleAdd} onCancel={() => setAdding(false)} saving={saving} showEmail />
       )}
 
       {loading && (
