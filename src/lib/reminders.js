@@ -98,6 +98,8 @@ Pickup is two times a week, which is Wednesday and Saturday morning. Recycling g
 
 The renovation is now complete. The one major change this year is the replacement of the old furnace. We also have new mattresses in the Queen and Twin Bedrooms.
 
+Just so you know, the contents of the wine refrigerator are fair game. There may (or may not be) some unopened bottles of wine along with some vermouth. Feel free to take what you want and leave any extra bottles behind for the next guest.
+
 Also, here are a few requests:
 I hope your weather is perfect, but if there is a storm, please try to secure whatever is on the deck. And remember, the new countertops should only be cleaned with soap and water. Please don't put hot pans or pots directly on them.
 
