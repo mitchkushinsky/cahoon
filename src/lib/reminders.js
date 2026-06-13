@@ -100,7 +100,9 @@ The renovation is now complete. The one major change this year is the replacemen
 
 Just so you know, the contents of the wine refrigerator are fair game. There may (or may not be) some unopened bottles of wine along with some vermouth. Feel free to take what you want and leave any extra bottles behind for the next guest.
 
-Also, here are a few requests:
+If you want to purchase a weekly renter's beach sticker, you will need copies of the Short-Term Rental Certificate (attached), your Lease, and your Vehicle Registration. Stickers can be purchased at the Beach Office located at the Town Pier, but it may be cheaper to just pay the daily fee.
+
+Also, here are a few reminders:
 I hope your weather is perfect, but if there is a storm, please try to secure whatever is on the deck. And remember, the new countertops should only be cleaned with soap and water. Please don't put hot pans or pots directly on them.
 
 Enjoy your vacation and please let me know if you have trouble finding anything.
