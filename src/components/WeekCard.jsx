@@ -3,6 +3,21 @@ import { computePayment } from '../lib/paymentLogic'
 
 const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
+function parseDateLocal(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function ownerLabel(ownerUseRow, weekStart) {
+  if (!ownerUseRow?.start_date || !ownerUseRow?.end_date) return 'Owner Use'
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+  if (ownerUseRow.start_date === toISODate(weekStart) && ownerUseRow.end_date === toISODate(weekEnd)) {
+    return 'Owner Use'
+  }
+  return `${fmtDate(parseDateLocal(ownerUseRow.start_date))}–${fmtDate(parseDateLocal(ownerUseRow.end_date))}`
+}
+
 // Always show the calendar week boundaries (Sun – Sat), never rental dates
 function formatWeekRange(weekStart) {
   const end = new Date(weekStart)
@@ -128,7 +143,7 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
 
           {resolvedType === 'owner' && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-blue-100 text-blue-700">
-              🏠 Owner Use
+              🏠 {ownerLabel(ownerUseRow, weekStart)}
             </span>
           )}
 

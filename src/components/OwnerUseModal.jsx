@@ -4,10 +4,18 @@ import { toISODate } from '../lib/parseCSV'
 import AppointmentList from './AppointmentList'
 import CaretakerNotes from './CaretakerNotes'
 
+const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
+
 export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite, ownerLockCode, lockboxCode }) {
   const { weekStart } = week
+
+  const weekEndDate = new Date(weekStart)
+  weekEndDate.setDate(weekEndDate.getDate() + 6)
+
   const [editing, setEditing] = useState(false)
   const [notes, setNotes] = useState(ownerUseRow?.notes || '')
+  const [startDate, setStartDate] = useState(ownerUseRow?.start_date || toISODate(weekStart))
+  const [endDate, setEndDate] = useState(ownerUseRow?.end_date || toISODate(weekEndDate))
   const [saving, setSaving] = useState(false)
 
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
@@ -16,7 +24,7 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
     if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     await supabase.from('owner_use').upsert(
-      { week_start: toISODate(weekStart), notes: notes.trim() || null },
+      { week_start: toISODate(weekStart), notes: notes.trim() || null, start_date: startDate, end_date: endDate },
       { onConflict: 'week_start' }
     )
     setSaving(false)
@@ -54,6 +62,16 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
 
           {editing ? (
             <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">End Date</label>
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+                </div>
+              </div>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
@@ -63,7 +81,12 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
               />
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setEditing(false); setNotes(ownerUseRow?.notes || '') }}
+                  onClick={() => {
+                    setEditing(false)
+                    setNotes(ownerUseRow?.notes || '')
+                    setStartDate(ownerUseRow?.start_date || toISODate(weekStart))
+                    setEndDate(ownerUseRow?.end_date || toISODate(weekEndDate))
+                  }}
                   className="flex-1 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
                 >
                   Cancel

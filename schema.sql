@@ -4,8 +4,14 @@ create table if not exists owner_use (
   id uuid primary key default gen_random_uuid(),
   week_start date unique not null,
   notes text,
+  start_date date,
+  end_date date,
   created_at timestamptz default now()
 );
+
+-- Migration: add partial-week columns to existing owner_use table
+-- ALTER TABLE owner_use ADD COLUMN start_date date;
+-- ALTER TABLE owner_use ADD COLUMN end_date date;
 
 create table if not exists appointments (
   id uuid primary key default gen_random_uuid(),

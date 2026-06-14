@@ -191,7 +191,19 @@ export default function App() {
     setCompletedTasks(completedTasksResp.data || [])
   }, [])
 
-  const getOwnerUseRow    = (weekStart) => ownerUse.find(r => r.week_start === toISODate(weekStart))
+  const getOwnerUseRow = (weekStart) => {
+    const weekISO    = toISODate(weekStart)
+    const weekEndDate = new Date(weekStart)
+    weekEndDate.setDate(weekEndDate.getDate() + 6)
+    const weekEndISO = toISODate(weekEndDate)
+    return ownerUse.find(r => {
+      const rowStart = r.start_date || r.week_start
+      const fb = new Date(r.week_start)
+      fb.setDate(fb.getDate() + 6)
+      const rowEnd = r.end_date || toISODate(fb)
+      return rowStart <= weekEndISO && rowEnd >= weekISO
+    })
+  }
   const getCommentOverride = (weekStart) => commentOverrides.find(r => r.week_start === toISODate(weekStart))
   const getCaretakerNote   = (weekStart) => caretakerNotes.find(r => r.week_start === toISODate(weekStart))
 
