@@ -131,6 +131,10 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
     singleBadge = computePayment(week).badge
   }
 
+  const ownerStart = ownerUseRow?.start_date ? parseDateLocal(ownerUseRow.start_date) : new Date(weekStart)
+  const ownerEnd   = ownerUseRow?.end_date   ? parseDateLocal(ownerUseRow.end_date)   : new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000)
+  const { leftPct: ownerLeft, widthPct: ownerWidth } = ganttMetrics(weekStart, ownerStart, ownerEnd)
+
   return (
     <button
       onClick={onClick}
@@ -143,8 +147,13 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
 
           {resolvedType === 'owner' && (
             <div className="relative w-full h-7">
-              <span className="absolute inset-0 flex items-center gap-1 px-2.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                <span className="truncate">🏠 Owner Use · {ownerLabel(ownerUseRow, weekStart)}</span>
+              <span
+                className="absolute inset-y-0 flex items-center rounded-full text-xs font-semibold overflow-hidden bg-blue-100 text-blue-700"
+                style={{ left: `${ownerLeft}%`, width: `${ownerWidth}%`, minWidth: '1.25rem' }}
+              >
+                <span className="flex items-center gap-1 px-2 min-w-0">
+                  <span className="truncate">🏠 Owner Use · {ownerLabel(ownerUseRow, weekStart)}</span>
+                </span>
               </span>
             </div>
           )}
