@@ -9,13 +9,13 @@ function parseDateLocal(iso) {
 }
 
 function ownerLabel(ownerUseRow, weekStart) {
-  if (!ownerUseRow?.start_date || !ownerUseRow?.end_date) return 'Owner Use'
-  const weekEnd = new Date(weekStart)
-  weekEnd.setDate(weekEnd.getDate() + 6)
-  if (ownerUseRow.start_date === toISODate(weekStart) && ownerUseRow.end_date === toISODate(weekEnd)) {
-    return 'Owner Use'
-  }
-  return `${fmtDate(parseDateLocal(ownerUseRow.start_date))}–${fmtDate(parseDateLocal(ownerUseRow.end_date))}`
+  const start = ownerUseRow?.start_date
+    ? parseDateLocal(ownerUseRow.start_date)
+    : new Date(weekStart)
+  const end = ownerUseRow?.end_date
+    ? parseDateLocal(ownerUseRow.end_date)
+    : (() => { const d = new Date(weekStart); d.setDate(d.getDate() + 6); return d })()
+  return `${fmtDate(start)}–${fmtDate(end)}`
 }
 
 // Always show the calendar week boundaries (Sun – Sat), never rental dates
