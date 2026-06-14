@@ -243,10 +243,14 @@ function AssignRenterForm({ weekStart, onSaved, onCancel, isDemo, onDemoWrite })
 
 // ─── VacantModal ──────────────────────────────────────────────────────────────
 
+const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
+
 export default function VacantModal({ week, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite }) {
   const { weekStart } = week
   const [action, setAction] = useState(null) // null | 'owner' | 'assign'
   const [notes, setNotes] = useState('')
+  const [startDate, setStartDate] = useState(toISODate(weekStart))
+  const [endDate, setEndDate] = useState(toISODate(addDays(weekStart, 6)))
   const [saving, setSaving] = useState(false)
 
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
@@ -255,7 +259,7 @@ export default function VacantModal({ week, appointments, caretakerNote, isAdmin
     if (isDemo) { onDemoWrite(); return }
     setSaving(true)
     await supabase.from('owner_use').upsert(
-      { week_start: toISODate(weekStart), notes: notes.trim() || null },
+      { week_start: toISODate(weekStart), notes: notes.trim() || null, start_date: startDate, end_date: endDate },
       { onConflict: 'week_start' }
     )
     setSaving(false)
@@ -292,6 +296,16 @@ export default function VacantModal({ week, appointments, caretakerNote, isAdmin
           {action === 'owner' && (
             <div className="space-y-3 border border-blue-200 rounded-xl p-4 bg-blue-50">
               <p className="text-sm font-medium text-blue-800">Mark as Owner Use</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">End Date</label>
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+                </div>
+              </div>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
