@@ -142,9 +142,11 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
           <p className="text-xs text-gray-400 font-medium mb-1">{formatWeekRange(weekStart)}</p>
 
           {resolvedType === 'owner' && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-blue-100 text-blue-700">
-              🏠 {ownerLabel(ownerUseRow, weekStart)}
-            </span>
+            <div className="relative w-full h-7">
+              <span className="absolute inset-0 flex items-center gap-1 px-2.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                <span className="truncate">🏠 Owner Use · {ownerLabel(ownerUseRow, weekStart)}</span>
+              </span>
+            </div>
           )}
 
           {resolvedType === 'vacant' && (
