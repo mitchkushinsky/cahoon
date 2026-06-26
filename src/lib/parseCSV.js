@@ -77,7 +77,10 @@ function parseRow(row) {
   const startDate = parseDate(row[2])
   const endDate   = parseDate(row[3])
 
-  if (!name || !startDate || !endDate) return null // skip unparseable rows
+  if (!name || !startDate || !endDate) {
+    if (!name) console.warn('[parseCSV] skipped row — empty/undefined name:', row)
+    return null // skip unparseable rows
+  }
 
   const isOwnerUse  = OWNER_NAMES.some(n => name.toLowerCase().includes(n))
   const comment     = (row[4] || '').trim() || null
@@ -229,7 +232,30 @@ export function buildCalendar(entries, appointments = []) {
 export function parseCSVEntries(csvText) {
   const { data: rows } = Papa.parse(csvText, { skipEmptyLines: true })
   const dataRows = rows.slice(1).filter(row => row.some(cell => cell?.trim()))
-  return dataRows.map(parseRow).filter(Boolean)
+  const entries = dataRows.map(parseRow).filter(Boolean)
+
+  // TEMP DEBUG: log all parsed renter entries
+  console.log('[parseCSV] all parsed entries:', entries.map(e => ({
+    name: e.name,
+    startDate: toISODate(e.startDate),
+    endDate: toISODate(e.endDate),
+    isOwnerUse: e.isOwnerUse,
+  })))
+
+  // TEMP DEBUG: log entries overlapping the Jul 26–Aug 1 week
+  const jul26 = new Date(2026, 6, 26)   // 2026-07-26
+  const aug2  = new Date(2026, 7, 2)    // exclusive upper bound (Aug 2)
+  const jul26Entries = entries.filter(e =>
+    e.startDate < aug2 && e.endDate > jul26
+  )
+  console.log('[parseCSV] entries overlapping Jul 26–Aug 1:', jul26Entries.map(e => ({
+    name: e.name,
+    startDate: toISODate(e.startDate),
+    endDate: toISODate(e.endDate),
+    isOwnerUse: e.isOwnerUse,
+  })))
+
+  return entries
 }
 
 export function parseCSV(csvText, appointments = []) {
