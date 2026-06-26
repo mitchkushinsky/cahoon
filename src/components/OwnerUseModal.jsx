@@ -6,7 +6,7 @@ import CaretakerNotes from './CaretakerNotes'
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
 
-export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite, ownerLockCode, lockboxCode }) {
+export default function OwnerUseModal({ week, ownerUseRow, appointments, caretakerNote, isAdmin, onClose, onRefresh, isDemo, onDemoWrite, ownerLockCode, lockboxCode, rentals }) {
   const { weekStart } = week
 
   const weekEndDate = new Date(weekStart)
@@ -17,6 +17,14 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
   const [startDate, setStartDate] = useState(ownerUseRow?.start_date || toISODate(weekStart))
   const [endDate, setEndDate] = useState(ownerUseRow?.end_date || toISODate(weekEndDate))
   const [saving, setSaving] = useState(false)
+
+  const fmtConflictDate = iso =>
+    new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const conflict = (rentals || []).find(r =>
+    r.start_date && r.end_date &&
+    endDate >= r.start_date && startDate <= r.end_date
+  )
 
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
@@ -72,6 +80,11 @@ export default function OwnerUseModal({ week, ownerUseRow, appointments, caretak
                   <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
                 </div>
               </div>
+              {conflict && (
+                <p className="text-xs text-amber-600">
+                  ⚠️ {conflict.renters?.name}'s rental starts {fmtConflictDate(conflict.start_date)}. Check your dates.
+                </p>
+              )}
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}

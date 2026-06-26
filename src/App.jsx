@@ -453,6 +453,7 @@ export default function App() {
                 onDemoWrite={showDemoToast}
                 ownerLockCode={ownerLockCode}
                 lockboxCode={lockboxCode}
+                rentals={allRentals}
               />
             ) : (
               <VacantModal
