@@ -66,9 +66,33 @@ function rentalToEntry(rental, renter) {
  * @returns {Array}            - Same week-array shape as parseCSV()
  */
 export function buildSupabaseCalendar(rentals, renters, appointments = []) {
+  // TEMP DEBUG: confirm this function is running
+  console.log('[supabaseRentals] buildSupabaseCalendar called — rentals count:', (rentals || []).length, '| renters count:', (renters || []).length)
+
   const renterMap = Object.fromEntries((renters || []).map(r => [r.id, r]))
   const entries = (rentals || [])
     .map(r => rentalToEntry(r, renterMap[r.renter_id]))
     .filter(Boolean)
+
+  // TEMP DEBUG: log all entries and flag missing names
+  console.log('[supabaseRentals] all entries:', entries.map(e => ({
+    name: e.name,
+    startDate: e.startDate?.toISOString().slice(0, 10),
+    endDate: e.endDate?.toISOString().slice(0, 10),
+  })))
+  entries.filter(e => !e.name || e.name === 'Unknown').forEach(e =>
+    console.warn('[supabaseRentals] entry with missing/Unknown name — raw rental:', rentals.find(r => r.id === e.rentalId))
+  )
+
+  // TEMP DEBUG: log entries overlapping Jul 26–Aug 1
+  const jul26 = new Date(2026, 6, 26)
+  const aug2  = new Date(2026, 7, 2)
+  const jul26Entries = entries.filter(e => e.startDate < aug2 && e.endDate > jul26)
+  console.log('[supabaseRentals] entries overlapping Jul 26–Aug 1:', jul26Entries.map(e => ({
+    name: e.name,
+    startDate: e.startDate?.toISOString().slice(0, 10),
+    endDate: e.endDate?.toISOString().slice(0, 10),
+  })))
+
   return buildCalendar(entries, appointments)
 }
