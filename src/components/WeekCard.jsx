@@ -165,7 +165,13 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
           )}
 
           {resolvedType === 'renter' && renterInfo?.dates?.start && renterInfo?.dates?.end ? (
-            <GanttPill
+            // TEMP DEBUG: log actual GanttPill inputs for every renter week
+            console.log('[WeekCard] renter GanttPill inputs', {
+              name: renterInfo.name,
+              weekStart: weekStart?.toISOString?.(),
+              datesStart: renterInfo.dates.start?.toISOString?.(),
+              datesEnd: renterInfo.dates.end?.toISOString?.(),
+            }) || <GanttPill
               name={renterInfo.name}
               dates={renterInfo.dates}
               badge={singleBadge}
