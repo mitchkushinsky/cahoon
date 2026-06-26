@@ -196,13 +196,18 @@ export default function App() {
     const weekEndDate = new Date(weekStart)
     weekEndDate.setDate(weekEndDate.getDate() + 6)
     const weekEndISO = toISODate(weekEndDate)
-    return ownerUse.find(r => {
+    const match = ownerUse.find(r => {
       const rowStart = r.start_date || r.week_start
       const fb = new Date(r.week_start)
       fb.setDate(fb.getDate() + 6)
       const rowEnd = r.end_date || toISODate(fb)
-      return rowStart <= weekEndISO && rowEnd >= weekISO
+      const hit = rowStart <= weekEndISO && rowEnd >= weekISO
+      // TEMP DEBUG
+      if (hit) console.log('[getOwnerUseRow] MATCH week', weekISO, '→ row', { week_start: r.week_start, start_date: r.start_date, end_date: r.end_date, rowStart, rowEnd })
+      return hit
     })
+    if (!match) console.log('[getOwnerUseRow] no match week', weekISO)
+    return match
   }
   const getCommentOverride = (weekStart) => commentOverrides.find(r => r.week_start === toISODate(weekStart))
   const getCaretakerNote   = (weekStart) => caretakerNotes.find(r => r.week_start === toISODate(weekStart))
