@@ -42,8 +42,8 @@ function ganttMetrics(weekStart, startDate, endDate) {
   const clampedStart = new Date(Math.max(startDate.getTime(), weekStart.getTime()))
   const clampedEnd   = new Date(Math.min(endDate.getTime(),   weekEnd.getTime()))
 
-  const leftPct  = (clampedStart.getTime() - weekStart.getTime()) / WEEK_MS * 100
-  const widthPct = (clampedEnd.getTime()   - clampedStart.getTime()) / WEEK_MS * 100
+  const leftPct  = Math.max(0, Math.min(100, (clampedStart.getTime() - weekStart.getTime()) / WEEK_MS * 100))
+  const widthPct = Math.max(0, Math.min(100, (clampedEnd.getTime()   - clampedStart.getTime()) / WEEK_MS * 100))
 
   return { leftPct, widthPct }
 }
