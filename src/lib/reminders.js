@@ -103,6 +103,8 @@ Just so you know, the contents of the wine refrigerator are fair game. There may
 If you want to purchase a weekly renter's beach sticker, you will need copies of the Short-Term Rental Certificate (attached), your Lease, and your Vehicle Registration. Stickers can be purchased at the Beach Office located at the Town Pier, but it may be cheaper to just pay the daily fee.
 
 Also, here are a few reminders:
+We've been having some problem with the bedroom mini-splits overheating in this hot weather. To mitigate the risk, can you try to keep the bedroom doors closed while the A/C is on so that the units are not trying to cool the entire house.
+
 I hope your weather is perfect, but if there is a storm, please try to secure whatever is on the deck. And remember, the new countertops should only be cleaned with soap and water. Please don't put hot pans or pots directly on them.
 
 Enjoy your vacation and please let me know if you have trouble finding anything.
