@@ -8,6 +8,20 @@ import SeasonInviteModal from './SeasonInviteModal'
 
 const NEXT_YEAR = new Date().getFullYear() + 1
 
+// Not Returning renters sort last regardless of date — there's no date to
+// act on anymore, so earliest-first stops being the useful order for them.
+// Everyone else sorts ascending by proposed_start; the ISO "YYYY-MM-DD"
+// strings compare correctly as plain strings. Shared by the initial load
+// and by handleUpdated below (a status change to/from "Not Returning" needs
+// the list to actually re-sort, not just the one row's data to change) so
+// the two can't drift apart.
+function compareRows(a, b) {
+  const aLast = a.invite.status === 'not_returning'
+  const bLast = b.invite.status === 'not_returning'
+  if (aLast !== bLast) return aLast ? 1 : -1
+  return (a.invite.proposed_start || '').localeCompare(b.invite.proposed_start || '')
+}
+
 function InviteRow({ renter, invite, onSelect }) {
   const statusMeta = STATUS_META[invite.status] || STATUS_META.not_sent
   return (
@@ -21,7 +35,7 @@ function InviteRow({ renter, invite, onSelect }) {
           {fmtDateRange(invite.proposed_start, invite.proposed_end)} · {fmtMoney(invite.proposed_rent)}
         </p>
       </div>
-      <span className={`flex-shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusMeta.badgeClass}`}>
+      <span className={`flex-shrink-0 inline-flex items-center max-w-[120px] px-2.5 py-1 rounded-full text-xs font-semibold truncate ${statusMeta.badgeClass}`}>
         {statusMeta.label}
       </span>
     </div>
@@ -91,7 +105,7 @@ export default function SeasonInvitesTab() {
       const combined = eligible
         .map(({ renter }) => ({ renter, invite: inviteByRenter[renter.id] }))
         .filter(r => r.invite)
-        .sort((a, b) => a.renter.name.localeCompare(b.renter.name))
+        .sort(compareRows)
 
       setRows(combined)
     } catch (err) {
@@ -108,7 +122,9 @@ export default function SeasonInvitesTab() {
   }, [])
 
   const handleUpdated = (patchedInvite) => {
-    setRows(prev => prev.map(r => r.invite.id === patchedInvite.id ? { ...r, invite: patchedInvite } : r))
+    setRows(prev => prev
+      .map(r => r.invite.id === patchedInvite.id ? { ...r, invite: patchedInvite } : r)
+      .sort(compareRows))
     setSelected(prev => prev ? { ...prev, invite: patchedInvite } : prev)
   }
 

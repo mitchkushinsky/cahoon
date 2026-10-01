@@ -1,14 +1,17 @@
 import { mergeTemplate, renderHtml, renderPlain } from './reminders'
 
 // Shared between the list row badge and the detail modal's status selector
-// so the two never drift out of sync on label/color.
+// so the two never drift out of sync on label/color. selectorLabel is only
+// for the <select> option text, where "Not Returning 2027" runs too wide —
+// badges always use the full label; falls back to label when absent.
 export const STATUS_META = {
-  not_sent:  { label: 'Not Sent',  badgeClass: 'bg-gray-100 text-gray-500' },
-  sent:      { label: 'Sent',      badgeClass: 'bg-yellow-100 text-yellow-700' },
-  confirmed: { label: 'Confirmed', badgeClass: 'bg-green-100 text-green-700' },
-  declined:  { label: 'Declined', badgeClass: 'bg-red-100 text-red-700' },
+  not_sent:      { label: 'Not Sent',  badgeClass: 'bg-gray-100 text-gray-500' },
+  sent:          { label: 'Sent',      badgeClass: 'bg-yellow-100 text-yellow-700' },
+  confirmed:     { label: 'Confirmed', badgeClass: 'bg-green-100 text-green-700' },
+  declined:      { label: 'Declined', badgeClass: 'bg-red-100 text-red-700' },
+  not_returning: { label: 'Not Returning 2027', selectorLabel: 'Not Returning', badgeClass: 'bg-red-100 text-red-700' },
 }
-export const STATUS_OPTIONS = ['not_sent', 'sent', 'confirmed', 'declined']
+export const STATUS_OPTIONS = ['not_sent', 'sent', 'confirmed', 'declined', 'not_returning']
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 

@@ -83,7 +83,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusMeta.badgeClass}`}>
+          <span className={`inline-flex items-center max-w-full px-2.5 py-1 rounded-full text-xs font-semibold truncate ${statusMeta.badgeClass}`}>
             {statusMeta.label}
           </span>
 
@@ -147,7 +147,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
             <label className="text-xs font-semibold text-gray-500 block mb-1">Status</label>
             <select value={invite.status} onChange={handleStatusChange} className={inputCls}>
               {STATUS_OPTIONS.map(s => (
-                <option key={s} value={s}>{STATUS_META[s].label}</option>
+                <option key={s} value={s}>{STATUS_META[s].selectorLabel || STATUS_META[s].label}</option>
               ))}
             </select>
           </div>
