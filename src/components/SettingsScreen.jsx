@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseCSVEntries, toISODate } from '../lib/parseCSV'
 import { migrate2026 } from '../lib/migrate2026'
+import SeasonInvitesTab from './SeasonInvitesTab'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1582,6 +1583,7 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
             { key: 'renters',  label: 'Renters' },
             { key: 'import',   label: 'Import' },
             { key: 'property', label: 'Property' },
+            { key: 'invites',  label: `${new Date().getFullYear() + 1} Invites` },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -1605,7 +1607,9 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
             ? <RentersTab />
             : tab === 'import'
               ? <ImportTab csvUrl={csvUrl} onDataRefresh={() => { onDataRefresh(); handleClose() }} />
-              : <PropertyTab />
+              : tab === 'invites'
+                ? <SeasonInvitesTab />
+                : <PropertyTab />
           }
         </div>
       </div>

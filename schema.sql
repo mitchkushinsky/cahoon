@@ -38,3 +38,38 @@ alter table comment_overrides enable row level security;
 create policy "public access" on owner_use for all using (true) with check (true);
 create policy "public access" on appointments for all using (true) with check (true);
 create policy "public access" on comment_overrides for all using (true) with check (true);
+
+-- Season Invites tab (Settings): tracks next-season re-invite outreach to
+-- renters from the two most recent seasons. This table already exists in
+-- the live database (confirmed directly against the REST API — not present
+-- in this file's history, so it was created outside this repo's convention,
+-- same as several other tables here). Documented below to match what's
+-- actually live, not an idealized version: confirmed empirically that the
+-- live table has NEITHER the status check constraint NOR a uniqueness
+-- constraint on (renter_id, season_year) — an insert with an invalid status
+-- string, and a second insert duplicating an existing (renter_id,
+-- season_year) pair, both succeeded in a live test. The app only guards
+-- against duplicate rows at the application layer (season_invites.js checks
+-- for an existing row before inserting); there is no database-level backstop
+-- today. The two commented-out statements below would add both — run them
+-- in the Supabase SQL editor for project pvxhokdoainxoknfmacy if desired;
+-- neither has been applied.
+--
+-- create table if not exists season_invites (
+--   id uuid primary key default gen_random_uuid(),
+--   renter_id uuid references renters(id) not null,
+--   season_year integer not null,
+--   proposed_start date,
+--   proposed_end date,
+--   proposed_rent numeric,
+--   status text not null default 'not_sent',
+--   notes text,
+--   created_at timestamptz default now(),
+--   updated_at timestamptz default now()
+-- );
+-- alter table season_invites enable row level security;
+-- create policy "public access" on season_invites for all using (true) with check (true);
+
+-- Not yet applied — would add the integrity season_invites currently lacks:
+-- alter table season_invites add constraint season_invites_status_check check (status in ('not_sent', 'sent', 'confirmed', 'declined'));
+-- alter table season_invites add constraint season_invites_renter_id_season_year_key unique (renter_id, season_year);
