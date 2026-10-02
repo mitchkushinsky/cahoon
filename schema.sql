@@ -73,3 +73,18 @@ create policy "public access" on comment_overrides for all using (true) with che
 -- Not yet applied — would add the integrity season_invites currently lacks:
 -- alter table season_invites add constraint season_invites_status_check check (status in ('not_sent', 'sent', 'confirmed', 'declined'));
 -- alter table season_invites add constraint season_invites_renter_id_season_year_key unique (renter_id, season_year);
+
+-- Tasks: category field (Tasks screen). Confirmed live via the REST API that
+-- tasks.category does not exist yet (tasks itself is another table, like
+-- season_invites, that predates this file and isn't otherwise documented
+-- here) — this ALTER has not been applied. The app degrades gracefully
+-- without it (every task reads as uncategorized, flat list, no grouping
+-- headers), but saving a task with a category selected will fail until this
+-- is run. Run it in the Supabase SQL editor for project pvxhokdoainxoknfmacy
+-- before using the category selector.
+--
+-- ALTER TABLE tasks ADD COLUMN category text;
+--
+-- Valid values are enforced by the app only (null, 'winterize',
+-- 'new_season_setup') — no check constraint, matching this file's existing
+-- practice of not adding one unless asked.

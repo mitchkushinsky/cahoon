@@ -21,6 +21,102 @@ function formatCompleted(completed_at) {
   return 'Completed ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+// Options for the form's category <select>, and the fixed group order/labels
+// for the list below — both read from this one place so they can't drift.
+const TASK_CATEGORIES = [
+  { value: '',                 label: 'None' },
+  { value: 'winterize',        label: 'Winterize' },
+  { value: 'new_season_setup', label: 'New Season Setup' },
+]
+
+// Buckets pending tasks into the three groups, preserving each task's
+// existing relative order (already due_date-sorted by the query in App.jsx —
+// this only partitions that order, never re-sorts it). Grouping is an
+// all-or-nothing decision across the whole list: if nothing has a category
+// yet, every task falls into "general" and the caller renders flat instead.
+function groupTasksByCategory(tasks) {
+  const winterize = tasks.filter(t => t.category === 'winterize')
+  const newSeasonSetup = tasks.filter(t => t.category === 'new_season_setup')
+  const general = tasks.filter(t => t.category !== 'winterize' && t.category !== 'new_season_setup')
+  return [
+    { key: 'winterize', label: 'Winterize', tasks: winterize },
+    { key: 'new_season_setup', label: 'New Season Setup', tasks: newSeasonSetup },
+    { key: 'general', label: 'General', tasks: general },
+  ].filter(g => g.tasks.length > 0)
+}
+
+// One pending-task row — factored out so the flat list and the grouped-by-
+// category list (below) render identical cards instead of two copies that
+// could drift.
+function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, onComplete, onEdit, onConfirmDelete, onCancelDelete, onDelete }) {
+  const due = formatDue(task.due_date)
+  return (
+    <div style={collapseStyle(isCollapsing)}>
+      <div className={`bg-white border border-gray-200 rounded-xl ${isCompleting ? 'task-flash' : ''}`}>
+        {isConfirm ? (
+          <div className="px-4 py-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-gray-700">Delete this task?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onDelete(task.id)}
+                className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={onCancelDelete}
+                className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-4 py-3 flex items-start gap-3">
+            <button
+              onClick={() => onComplete(task)}
+              disabled={isCompleting}
+              className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-green-400 disabled:cursor-default transition-colors text-base leading-none"
+              aria-label="Mark complete"
+            >
+              {isCompleting ? '✅' : ''}
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${isCompleting ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                {task.title}
+              </p>
+              {due && (
+                <p className={`text-xs mt-0.5 ${due.cls}`}>{due.text}</p>
+              )}
+              {task.notes && (
+                <p className="text-xs text-gray-400 mt-1 leading-snug">{task.notes}</p>
+              )}
+            </div>
+            {isAdmin && !isCompleting && (
+              <div className="flex gap-0.5 flex-shrink-0 -mr-1">
+                <button
+                  onClick={() => onEdit(task)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors leading-none"
+                  title="Edit"
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => onConfirmDelete(task.id)}
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors leading-none"
+                  title="Delete"
+                >
+                  🗑️
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const collapseStyle = (collapsing) =>
   collapsing
     ? { maxHeight: 0, opacity: 0, marginBottom: 0, overflow: 'hidden',
@@ -36,7 +132,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [formTitle, setFormTitle]   = useState('')
   const [formNotes, setFormNotes]   = useState('')
-  const [formDueDate, setFormDueDate] = useState('')
+  const [formCategory, setFormCategory] = useState('')
   const [saving, setSaving]         = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
 
@@ -60,7 +156,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
     setEditingTask(null)
     setFormTitle('')
     setFormNotes('')
-    setFormDueDate('')
+    setFormCategory('')
     setShowForm(true)
   }
 
@@ -68,7 +164,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
     setEditingTask(task)
     setFormTitle(task.title)
     setFormNotes(task.notes || '')
-    setFormDueDate(task.due_date ? String(task.due_date).slice(0, 10) : '')
+    setFormCategory(task.category || '')
     setShowForm(true)
   }
 
@@ -77,10 +173,14 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
   const handleSave = async () => {
     if (!formTitle.trim()) return
     setSaving(true)
+    // due_date is intentionally left out — the form no longer sets it, and
+    // omitting it from the payload (rather than writing null) means editing
+    // a task's title/notes/category never touches whatever due_date value,
+    // if any, is already on the row. New tasks are simply created without one.
     const payload = {
       title:    formTitle.trim(),
       notes:    formNotes.trim() || null,
-      due_date: formDueDate || null,
+      category: formCategory || null,
     }
     if (editingTask) {
       await supabase.from('tasks').update(payload).eq('id', editingTask.id)
@@ -144,12 +244,13 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
             rows={2}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 resize-none"
           />
-          <input
-            type="date"
-            value={formDueDate}
-            onChange={e => setFormDueDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
-          />
+          <select
+            value={formCategory}
+            onChange={e => setFormCategory(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
+          >
+            {TASK_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleSave}
@@ -168,81 +269,52 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
         </div>
       )}
 
-      {/* Pending task cards */}
-      <div>
-        {tasks.map(task => {
-          const due          = formatDue(task.due_date)
-          const isCompleting = completingIds.has(task.id)
-          const isCollapsing = collapsingIds.has(task.id)
-          const isConfirm    = confirmDeleteId === task.id
-
+      {/* Pending task cards — grouped by category once any task has one set
+          (visible in caretaker mode too, same as the rest of this list;
+          only the +Add/Edit/Delete controls are isAdmin-gated, unchanged).
+          Otherwise the same flat list as before, no headers. */}
+      {(() => {
+        const cardProps = {
+          isAdmin,
+          onComplete: handleComplete,
+          onEdit: openEdit,
+          onConfirmDelete: setConfirmDeleteId,
+          onCancelDelete: () => setConfirmDeleteId(null),
+          onDelete: handleDelete,
+        }
+        const hasCategorized = tasks.some(t => t.category)
+        if (!hasCategorized) {
           return (
-            <div key={task.id} style={collapseStyle(isCollapsing)}>
-              <div className={`bg-white border border-gray-200 rounded-xl ${isCompleting ? 'task-flash' : ''}`}>
-                {isConfirm ? (
-                  <div className="px-4 py-3 flex items-center justify-between gap-3">
-                    <p className="text-sm text-gray-700">Delete this task?</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleDelete(task.id)}
-                        className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="px-4 py-3 flex items-start gap-3">
-                    <button
-                      onClick={() => handleComplete(task)}
-                      disabled={isCompleting}
-                      className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-green-400 disabled:cursor-default transition-colors text-base leading-none"
-                      aria-label="Mark complete"
-                    >
-                      {isCompleting ? '✅' : ''}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${isCompleting ? 'text-green-700 line-through' : 'text-gray-900'}`}>
-                        {task.title}
-                      </p>
-                      {due && (
-                        <p className={`text-xs mt-0.5 ${due.cls}`}>{due.text}</p>
-                      )}
-                      {task.notes && (
-                        <p className="text-xs text-gray-400 mt-1 leading-snug">{task.notes}</p>
-                      )}
-                    </div>
-                    {isAdmin && !isCompleting && (
-                      <div className="flex gap-0.5 flex-shrink-0 -mr-1">
-                        <button
-                          onClick={() => openEdit(task)}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors leading-none"
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(task.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors leading-none"
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+            <div>
+              {tasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isCompleting={completingIds.has(task.id)}
+                  isCollapsing={collapsingIds.has(task.id)}
+                  isConfirm={confirmDeleteId === task.id}
+                  {...cardProps}
+                />
+              ))}
             </div>
           )
-        })}
-      </div>
+        }
+        return groupTasksByCategory(tasks).map(group => (
+          <div key={group.key} className="mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5 px-1">{group.label}</p>
+            {group.tasks.map(task => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                isCompleting={completingIds.has(task.id)}
+                isCollapsing={collapsingIds.has(task.id)}
+                isConfirm={confirmDeleteId === task.id}
+                {...cardProps}
+              />
+            ))}
+          </div>
+        ))
+      })()}
 
       {tasks.length === 0 && !showForm && (
         <p className="text-xs text-gray-400 px-1">No pending tasks</p>
