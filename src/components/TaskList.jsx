@@ -132,6 +132,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [formTitle, setFormTitle]   = useState('')
   const [formNotes, setFormNotes]   = useState('')
+  const [formDueDate, setFormDueDate] = useState('')
   const [formCategory, setFormCategory] = useState('')
   const [saving, setSaving]         = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
@@ -156,6 +157,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
     setEditingTask(null)
     setFormTitle('')
     setFormNotes('')
+    setFormDueDate('')
     setFormCategory('')
     setShowForm(true)
   }
@@ -164,6 +166,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
     setEditingTask(task)
     setFormTitle(task.title)
     setFormNotes(task.notes || '')
+    setFormDueDate(task.due_date ? String(task.due_date).slice(0, 10) : '')
     setFormCategory(task.category || '')
     setShowForm(true)
   }
@@ -173,13 +176,10 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
   const handleSave = async () => {
     if (!formTitle.trim()) return
     setSaving(true)
-    // due_date is intentionally left out — the form no longer sets it, and
-    // omitting it from the payload (rather than writing null) means editing
-    // a task's title/notes/category never touches whatever due_date value,
-    // if any, is already on the row. New tasks are simply created without one.
     const payload = {
       title:    formTitle.trim(),
       notes:    formNotes.trim() || null,
+      due_date: formDueDate || null,
       category: formCategory || null,
     }
     if (editingTask) {
@@ -243,6 +243,12 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
             onChange={e => setFormNotes(e.target.value)}
             rows={2}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 resize-none"
+          />
+          <input
+            type="date"
+            value={formDueDate}
+            onChange={e => setFormDueDate(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
           />
           <select
             value={formCategory}
