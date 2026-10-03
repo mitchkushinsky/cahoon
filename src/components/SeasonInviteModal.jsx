@@ -15,10 +15,10 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
   const [error, setError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
 
-  // Dates and rent are only ever editable before the first send — once a
-  // status beyond "not_sent" is set, what was actually proposed is a record
-  // of what was sent, not a draft to keep adjusting.
-  const locked = invite.status !== 'not_sent'
+  // Dates and rent stay editable at every status except "not_returning" —
+  // there's no point adjusting a proposed week for a renter who isn't
+  // coming back.
+  const locked = invite.status === 'not_returning'
 
   const persist = async (patch) => {
     setSaving(true)
