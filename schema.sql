@@ -71,8 +71,15 @@ create policy "public access" on comment_overrides for all using (true) with che
 -- create policy "public access" on season_invites for all using (true) with check (true);
 
 -- Not yet applied — would add the integrity season_invites currently lacks:
--- alter table season_invites add constraint season_invites_status_check check (status in ('not_sent', 'sent', 'confirmed', 'declined'));
+-- alter table season_invites add constraint season_invites_status_check check (status in ('not_sent', 'sent', 'confirmed', 'lease_sent', 'lease_signed', 'declined', 'not_returning'));
 -- alter table season_invites add constraint season_invites_renter_id_season_year_key unique (renter_id, season_year);
+
+-- Lease generation (Season Invites): stores the Google Drive view URL of the
+-- generated lease document for a renter. Already exists in the live
+-- database (confirmed via the REST API) — not something this ALTER needs to
+-- apply, just documenting it here to match the rest of this file's practice.
+--
+-- ALTER TABLE season_invites ADD COLUMN lease_url text;
 
 -- Tasks: category field (Tasks screen). Confirmed live via the REST API that
 -- tasks.category does not exist yet (tasks itself is another table, like

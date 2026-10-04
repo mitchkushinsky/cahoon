@@ -5,13 +5,20 @@ import { mergeTemplate, renderHtml, renderPlain } from './reminders'
 // for the <select> option text, where "Not Returning 2027" runs too wide —
 // badges always use the full label; falls back to label when absent.
 export const STATUS_META = {
-  not_sent:      { label: 'Not Sent',  badgeClass: 'bg-gray-100 text-gray-500' },
-  sent:          { label: 'Sent',      badgeClass: 'bg-yellow-100 text-yellow-700' },
-  confirmed:     { label: 'Confirmed', badgeClass: 'bg-green-100 text-green-700' },
+  not_sent:      { label: 'Not Sent',     badgeClass: 'bg-gray-100 text-gray-500' },
+  sent:          { label: 'Sent',         badgeClass: 'bg-yellow-100 text-yellow-700' },
+  confirmed:     { label: 'Confirmed',    badgeClass: 'bg-green-100 text-green-700' },
+  lease_created: { label: 'Lease Created', badgeClass: 'bg-blue-100 text-blue-700' },
+  lease_sent:    { label: 'Lease Sent',   badgeClass: 'bg-orange-100 text-orange-700' },
+  lease_signed:  { label: 'Lease Signed', badgeClass: 'bg-emerald-200 text-emerald-900' },
   declined:      { label: 'Declined', badgeClass: 'bg-red-100 text-red-700' },
   not_returning: { label: 'Not Returning 2027', selectorLabel: 'Not Returning', badgeClass: 'bg-red-100 text-red-700' },
 }
-export const STATUS_OPTIONS = ['not_sent', 'sent', 'confirmed', 'declined', 'not_returning']
+// Progression order: Not Sent -> Sent -> Confirmed -> Lease Created ->
+// Lease Sent -> Lease Signed -> Declined / Not Returning 2027 (the two exit
+// states last). Lease generation sets lease_created, not lease_sent — the
+// renter moves it to Lease Sent by hand once they've actually emailed it.
+export const STATUS_OPTIONS = ['not_sent', 'sent', 'confirmed', 'lease_created', 'lease_sent', 'lease_signed', 'declined', 'not_returning']
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 

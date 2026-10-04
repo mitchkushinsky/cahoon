@@ -47,6 +47,9 @@ export default function SeasonInvitesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null) // { renter, invite }
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null) // { done, total, currentName }
+  const [bulkSummary, setBulkSummary] = useState(null) // { created, failed: [{ name, message }] }
   // Guards against StrictMode's dev-only double-invoke of mount effects:
   // load() ends with a conditional insert (auto-generate missing rows), and
   // there's no database-level uniqueness constraint on (renter_id,
@@ -128,11 +131,100 @@ export default function SeasonInvitesTab() {
     setSelected(prev => prev ? { ...prev, invite: patchedInvite } : prev)
   }
 
+  const confirmedRows = rows.filter(r => r.invite.status === 'confirmed')
+
+  // Generates a lease for every currently-confirmed renter, one at a time
+  // (not parallel — each is a real Drive copy + Docs edit against a shared
+  // API, and sequential keeps the progress readout meaningful and avoids
+  // hammering the Drive API with concurrent requests against the same
+  // template file). Each success is written and reflected in the list
+  // immediately rather than batched at the end, so a failure partway
+  // through doesn't lose the ones that already succeeded. Same
+  // lease_created status (not lease_sent) as the individual action in
+  // SeasonInviteModal.
+  const handleCreateLeases = async () => {
+    const targets = rows.filter(r => r.invite.status === 'confirmed')
+    if (targets.length === 0) return
+    setBulkRunning(true)
+    setBulkSummary(null)
+    let created = 0
+    const failed = []
+    for (let i = 0; i < targets.length; i++) {
+      const { renter, invite } = targets[i]
+      setBulkProgress({ done: i, total: targets.length, currentName: renter.name })
+      try {
+        const res = await fetch('/api/generate-lease', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: renter.name,
+            email: renter.email,
+            start_date: invite.proposed_start,
+            end_date: invite.proposed_end,
+            proposed_rent: invite.proposed_rent,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Lease generation failed')
+        const patch = { status: 'lease_created', lease_url: data.url, updated_at: new Date().toISOString() }
+        const { error: updateErr } = await supabase.from('season_invites').update(patch).eq('id', invite.id)
+        if (updateErr) throw new Error(updateErr.message)
+        created++
+        setRows(prev => prev
+          .map(r => r.invite.id === invite.id ? { ...r, invite: { ...r.invite, ...patch } } : r)
+          .sort(compareRows))
+      } catch (err) {
+        failed.push({ name: renter.name, message: err.message })
+      }
+    }
+    setBulkProgress({ done: targets.length, total: targets.length, currentName: null })
+    setBulkSummary({ created, failed })
+    setBulkRunning(false)
+  }
+
   return (
     <div className="px-4 py-4 space-y-3">
       <p className="text-xs text-gray-400">
         Renters who rented in {eligibleRentalYears().join(' or ')}, proposed one year ahead (52 weeks) at the same rent.
       </p>
+
+      {!bulkRunning && confirmedRows.length > 0 && (
+        <button
+          onClick={handleCreateLeases}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+        >
+          Create Leases ({confirmedRows.length})
+        </button>
+      )}
+
+      {bulkRunning && bulkProgress && (
+        <div className="flex items-center gap-2 text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+          Creating lease {Math.min(bulkProgress.done + 1, bulkProgress.total)} of {bulkProgress.total}
+          {bulkProgress.currentName ? ` for ${bulkProgress.currentName}` : ''}…
+        </div>
+      )}
+
+      {bulkSummary && !bulkRunning && (
+        <div className="flex items-start justify-between gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm">
+          <div>
+            <p className="font-medium text-blue-900">
+              {bulkSummary.created} lease{bulkSummary.created === 1 ? '' : 's'} created
+            </p>
+            {bulkSummary.failed.length > 0 && (
+              <p className="text-red-600 mt-1">
+                {bulkSummary.failed.length} failed: {bulkSummary.failed.map(f => f.name).join(', ')}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setBulkSummary(null)}
+            className="text-blue-400 hover:text-blue-600 flex-shrink-0 text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {loading && (
         <div className="flex justify-center py-8">

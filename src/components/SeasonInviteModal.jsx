@@ -14,6 +14,8 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [generatingLease, setGeneratingLease] = useState(false)
+  const [leaseError, setLeaseError] = useState(null)
 
   // Dates and rent stay editable at every status except "not_returning" —
   // there's no point adjusting a proposed week for a renter who isn't
@@ -60,6 +62,36 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
     }
   }
 
+  // Generates one lease via api/generate-lease.js, then moves status to
+  // "lease_created" (not "lease_sent" — that's a separate, manual step once
+  // the renter actually emails it) and stores the returned Drive URL in the
+  // same write, via the existing persist() so onUpdated/local state and the
+  // list row stay in sync exactly like every other field here.
+  const handleCreateLease = async () => {
+    setGeneratingLease(true)
+    setLeaseError(null)
+    try {
+      const res = await fetch('/api/generate-lease', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: renter?.name,
+          email: renter?.email,
+          start_date: invite.proposed_start,
+          end_date: invite.proposed_end,
+          proposed_rent: invite.proposed_rent,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Lease generation failed')
+      await persist({ status: 'lease_created', lease_url: data.url })
+    } catch (err) {
+      setLeaseError(err.message || 'Lease generation failed')
+    } finally {
+      setGeneratingLease(false)
+    }
+  }
+
   const preview = buildInviteEmailPreview(invite, renter)
   const statusMeta = STATUS_META[invite.status] || STATUS_META.not_sent
 
@@ -83,9 +115,21 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          <span className={`inline-flex items-center max-w-full px-2.5 py-1 rounded-full text-xs font-semibold truncate ${statusMeta.badgeClass}`}>
-            {statusMeta.label}
-          </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className={`inline-flex items-center max-w-full px-2.5 py-1 rounded-full text-xs font-semibold truncate ${statusMeta.badgeClass}`}>
+              {statusMeta.label}
+            </span>
+            {invite.lease_url && (
+              <a
+                href={invite.lease_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-blue-600 hover:underline"
+              >
+                View Lease →
+              </a>
+            )}
+          </div>
 
           {/* Proposed dates + rent */}
           <div className="space-y-3">
@@ -172,6 +216,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
+          {leaseError && <p className="text-xs text-red-600">{leaseError}</p>}
 
         </div>
 
@@ -190,6 +235,15 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
           >
             Mark as Sent ✓
           </button>
+          {invite.status === 'confirmed' && (
+            <button
+              onClick={handleCreateLease}
+              disabled={generatingLease}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
+            >
+              {generatingLease ? 'Creating Lease…' : 'Create Lease'}
+            </button>
+          )}
         </div>
 
       </div>
