@@ -86,10 +86,10 @@ function GanttPill({ name, dates, badge, weekStart, colorClass, onClick }) {
 }
 
 // Season-invite chip colors by status — confirmed/lease rows read as a real
-// booking (same solid green as a renter chip), sent is a lighter/muted
-// green (outreach is out but nothing's confirmed yet), not_sent is neutral
-// gray. declined/not_returning are never passed in here — WeekCard filters
-// them out before rendering, since the brief says not to show them at all.
+// booking (same solid green as a renter chip), sent is amber (outreach is
+// out but nothing's confirmed yet), not_sent is neutral gray.
+// declined/not_returning are never passed in here — WeekCard filters them
+// out before rendering, since the brief says not to show them at all.
 function inviteColorClass(status) {
   switch (status) {
     case 'confirmed':
@@ -98,7 +98,7 @@ function inviteColorClass(status) {
     case 'lease_signed':
       return 'bg-green-100 text-green-700'
     case 'sent':
-      return 'bg-green-50 text-green-600'
+      return 'bg-amber-100 text-amber-800'
     default:
       return 'bg-gray-100 text-gray-500'
   }

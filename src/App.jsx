@@ -17,7 +17,7 @@ import WelcomeEmailModal from './components/WelcomeEmailModal'
 import ICSImportModal from './components/ICSImportModal'
 import SettingsScreen from './components/SettingsScreen'
 import HelpScreen from './components/HelpScreen'
-import TaskList from './components/TaskList'
+import TasksScreen from './components/TasksScreen'
 import FinancialsScreen from './components/FinancialsScreen'
 import SeasonInviteModal from './components/SeasonInviteModal'
 
@@ -56,6 +56,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showFinancials, setShowFinancials] = useState(false)
+  const [showTasks, setShowTasks] = useState(false)
   const [demoToast, setDemoToast] = useState(false)
   const [tasks, setTasks] = useState([])
   const [completedTasks, setCompletedTasks] = useState([])
@@ -344,6 +345,19 @@ export default function App() {
                 Import Calendar
               </button>
             )}
+            {!isDemo && (
+              <button
+                onClick={() => setShowTasks(true)}
+                className="relative text-sm text-gray-500 font-medium hover:text-gray-700"
+              >
+                Tasks
+                {tasks.length > 0 && (
+                  <span className="absolute -top-2 -right-3 flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                    {tasks.length}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={loadData}
               disabled={loading}
@@ -412,10 +426,6 @@ export default function App() {
               />
             ))}
           </div>
-        )}
-
-        {!isDemo && (
-          <TaskList tasks={tasks} completedTasks={completedTasks} isAdmin={isAdmin} onRefresh={loadData} />
         )}
 
         {resolvedWeeks.length > 0 && (
@@ -555,6 +565,17 @@ export default function App() {
         <HelpScreen
           onClose={() => setShowHelp(false)}
           isAdmin={isAdmin}
+        />
+      )}
+
+      {/* Tasks screen — slides in from right */}
+      {showTasks && (
+        <TasksScreen
+          onClose={() => setShowTasks(false)}
+          tasks={tasks}
+          completedTasks={completedTasks}
+          isAdmin={isAdmin}
+          onRefresh={loadData}
         />
       )}
 
