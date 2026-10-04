@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseCSV, toISODate } from './lib/parseCSV'
 import { buildSupabaseCalendar } from './lib/supabaseRentals'
 import { computeReminders } from './lib/reminders'
@@ -19,6 +19,7 @@ import SettingsScreen from './components/SettingsScreen'
 import HelpScreen from './components/HelpScreen'
 import TaskList from './components/TaskList'
 import FinancialsScreen from './components/FinancialsScreen'
+import SeasonInviteModal from './components/SeasonInviteModal'
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ30InqobRxfZ7haOcmosYtzDonv6hxaF5W74QX6KAm4PB5eYJ9W3Pb5zFGtcFR21xnh8GgC8l54TP2/pub?gid=572457704&single=true&output=csv'
@@ -27,6 +28,10 @@ const CSV_URL =
 // When true: calendar is built from Supabase rentals table (CSV fetch is skipped).
 // When false: existing CSV-based behavior (safe fallback / testing).
 const USE_SUPABASE_RENTALS = true
+
+// Fallback only — used if property_settings.active_season_year can't be read
+// (e.g. CSV fallback path below, which predates season switching entirely).
+const DEFAULT_SEASON_YEAR = 2026
 
 const params  = new URLSearchParams(window.location.search)
 const isDemo  = params.get('mode') === 'demo'
@@ -57,6 +62,11 @@ export default function App() {
   const [ownerLockCode, setOwnerLockCode] = useState('')
   const [lockboxCode, setLockboxCode]     = useState('')
   const [allRentals, setAllRentals]       = useState([])
+  const [activeSeasonYear, setActiveSeasonYear] = useState(DEFAULT_SEASON_YEAR)
+  const [seasonInvites, setSeasonInvites] = useState([])
+  const [selectedInvite, setSelectedInvite] = useState(null)
+  const currentWeekRef = useRef(null)
+  const hasAutoScrolledRef = useRef(false)
 
   const showDemoToast = useCallback(() => {
     setDemoToast(true)
@@ -79,9 +89,18 @@ export default function App() {
     }
     try {
       if (USE_SUPABASE_RENTALS) {
-        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp, allRentalsResp] =
+        // Read first — the rentals/invites queries below filter by it, so
+        // it has to be known before the rest of the Promise.all fires.
+        const { data: settingsRows } = await supabase
+          .from('property_settings')
+          .select('active_season_year')
+          .limit(1)
+        const seasonYear = settingsRows?.[0]?.active_season_year || DEFAULT_SEASON_YEAR
+        setActiveSeasonYear(seasonYear)
+
+        const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp, allRentalsResp, invitesResp] =
           await Promise.all([
-            supabase.from('rentals').select('*').eq('season_year', 2026),
+            supabase.from('rentals').select('*').eq('season_year', seasonYear),
             supabase.from('renters').select('*'),
             supabase.from('appointments').select('*'),
             supabase.from('owner_use').select('*'),
@@ -95,12 +114,14 @@ export default function App() {
             supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
             supabase.from('property_settings').select('key, value').in('key', ['owner_lock_code', 'lockbox_code']),
             supabase.from('rentals').select('*, renters(name, email)'),
+            supabase.from('season_invites').select('*, renters(name, email)').eq('season_year', seasonYear + 1),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
           rentalsResp.data || [],
           rentersResp.data || [],
-          apptResp.data   || []
+          apptResp.data   || [],
+          invitesResp.data || []
         )
 
         setWeeks(parsedWeeks)
@@ -118,6 +139,7 @@ export default function App() {
         setOwnerLockCode(propByKey['owner_lock_code'] || '')
         setLockboxCode(propByKey['lockbox_code'] || '')
         setAllRentals(allRentalsResp.data || [])
+        setSeasonInvites(invitesResp.data || [])
       } else {
         // CSV fallback path
         const [csvResp, ouResp, apptResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp] = await Promise.all([
@@ -230,6 +252,25 @@ export default function App() {
 
   // Merge Supabase payment records into weeks (Supabase takes precedence over embedded data)
   const resolvedWeeks = resolveWeeksPayments(weeks, paymentRecords)
+
+  // The week whose Sun–Sat range contains today — ISO string comparison is
+  // safe here (same convention used elsewhere in this codebase) since
+  // "YYYY-MM-DD" sorts identically to chronological order.
+  const todayISO = toISODate(new Date())
+  const currentWeek = resolvedWeeks.find(w => {
+    const weekEnd = new Date(w.weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 7)
+    return toISODate(w.weekStart) <= todayISO && toISODate(weekEnd) > todayISO
+  })
+
+  // Auto-scroll to the current week once, right after the initial load —
+  // not on every subsequent refresh.
+  useEffect(() => {
+    if (!loading && !hasAutoScrolledRef.current && currentWeekRef.current) {
+      currentWeekRef.current.scrollIntoView({ block: 'center' })
+      hasAutoScrolledRef.current = true
+    }
+  }, [loading, currentWeek?.weekKey])
 
   const resolvedSelected = selected
     ? resolvedWeeks.find(w => w.weekKey === selected.weekKey) ?? selected
@@ -380,16 +421,19 @@ export default function App() {
         {resolvedWeeks.length > 0 && (
           <div className="space-y-2">
             {resolvedWeeks.map(week => (
-              <WeekCard
-                key={week.weekKey}
-                week={week}
-                ownerUseRow={getOwnerUseRow(week.weekStart)}
-                appointments={appointments}
-                commentOverride={getCommentOverride(week.weekStart)}
-                caretakerNote={getCaretakerNote(week.weekStart)}
-                isAdmin={isAdmin}
-                onClick={() => setSelected(week)}
-              />
+              <div key={week.weekKey} ref={week.weekKey === currentWeek?.weekKey ? currentWeekRef : null}>
+                <WeekCard
+                  week={week}
+                  ownerUseRow={getOwnerUseRow(week.weekStart)}
+                  appointments={appointments}
+                  commentOverride={getCommentOverride(week.weekStart)}
+                  caretakerNote={getCaretakerNote(week.weekStart)}
+                  isAdmin={isAdmin}
+                  onClick={() => setSelected(week)}
+                  seasonInvites={seasonInvites}
+                  onSelectInvite={setSelectedInvite}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -471,12 +515,26 @@ export default function App() {
         </Modal>
       )}
 
+      {/* Next season's invite chip, clicked from the calendar */}
+      {selectedInvite && (
+        <SeasonInviteModal
+          invite={selectedInvite}
+          renter={selectedInvite.renters}
+          onClose={() => setSelectedInvite(null)}
+          onUpdated={(patched) => {
+            setSelectedInvite(prev => prev && { ...prev, ...patched })
+            setSeasonInvites(prev => prev.map(i => i.id === patched.id ? { ...i, ...patched } : i))
+          }}
+        />
+      )}
+
       {/* Settings screen — slides in from right */}
       {showSettings && (
         <SettingsScreen
           csvUrl={CSV_URL}
           onClose={() => setShowSettings(false)}
           onDataRefresh={loadData}
+          activeSeasonYear={activeSeasonYear}
         />
       )}
 

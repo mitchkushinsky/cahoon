@@ -1402,7 +1402,63 @@ function ImportTab({ csvUrl, onDataRefresh }) {
 
 // ─── PropertyTab ─────────────────────────────────────────────────────────────
 
-function PropertyTab() {
+// "Start [Year] Season" — only shown once the active season's last rental
+// has actually ended, and hidden again right after switching (within this
+// mount) so it can't be fired twice in a row before the app reloads with
+// the new active_season_year.
+function StartSeasonSection({ activeSeasonYear, onDataRefresh }) {
+  const [lastEndDate, setLastEndDate] = useState(null)
+  const [loaded, setLoaded]           = useState(false)
+  const [switching, setSwitching]     = useState(false)
+  const [justSwitched, setJustSwitched] = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('rentals')
+      .select('end_date')
+      .eq('season_year', activeSeasonYear)
+      .order('end_date', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        setLastEndDate(data?.[0]?.end_date || null)
+        setLoaded(true)
+      })
+  }, [activeSeasonYear])
+
+  if (!loaded) return null
+
+  const nextYear     = activeSeasonYear + 1
+  const seasonEnded  = !!lastEndDate && toISODate(new Date()) > lastEndDate
+  if (!seasonEnded || justSwitched) return null
+
+  const handleStart = async () => {
+    const ok = confirm(`Switch the app to ${nextYear}? This will update the calendar and all screens to the ${nextYear} season.`)
+    if (!ok) return
+    setSwitching(true)
+    await supabase.from('property_settings').update({ active_season_year: nextYear })
+    setSwitching(false)
+    setJustSwitched(true)
+    onDataRefresh()
+  }
+
+  return (
+    <div className="border border-blue-200 bg-blue-50 rounded-xl p-4 space-y-2">
+      <p className="text-sm font-semibold text-blue-900">Season Rollover</p>
+      <p className="text-xs text-blue-700">
+        The {activeSeasonYear} season has ended. Ready to move the app to {nextYear}?
+      </p>
+      <button
+        onClick={handleStart}
+        disabled={switching}
+        className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
+      >
+        {switching ? 'Switching…' : `Start ${nextYear} Season`}
+      </button>
+    </div>
+  )
+}
+
+function PropertyTab({ activeSeasonYear, onDataRefresh }) {
   const [lockCode, setLockCode]       = useState('')
   const [lockboxCode, setLockboxCode] = useState('')
   const [loaded, setLoaded]           = useState(false)
@@ -1453,6 +1509,10 @@ function PropertyTab() {
 
   return (
     <div className="px-4 py-4 space-y-4">
+      {activeSeasonYear && (
+        <StartSeasonSection activeSeasonYear={activeSeasonYear} onDataRefresh={onDataRefresh} />
+      )}
+
       <div className="border border-gray-200 rounded-xl p-4 space-y-4">
         {/* Header row */}
         <div className="flex items-center justify-between">
@@ -1539,7 +1599,7 @@ function PropertyTab() {
 
 // ─── SettingsScreen ───────────────────────────────────────────────────────────
 
-export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
+export default function SettingsScreen({ onClose, onDataRefresh, csvUrl, activeSeasonYear }) {
   const [tab, setTab] = useState('renters')
   const [visible, setVisible] = useState(false)
 
@@ -1609,7 +1669,7 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl }) {
               ? <ImportTab csvUrl={csvUrl} onDataRefresh={() => { onDataRefresh(); handleClose() }} />
               : tab === 'invites'
                 ? <SeasonInvitesTab />
-                : <PropertyTab />
+                : <PropertyTab activeSeasonYear={activeSeasonYear} onDataRefresh={onDataRefresh} />
           }
         </div>
       </div>

@@ -95,3 +95,15 @@ create policy "public access" on comment_overrides for all using (true) with che
 -- Valid values are enforced by the app only (null, 'winterize',
 -- 'new_season_setup') — no check constraint, matching this file's existing
 -- practice of not adding one unless asked.
+
+-- Active season year (dynamic season switching): which season_year the app
+-- treats as "current" everywhere — the calendar's rentals fetch, the
+-- Settings "Start [Year] Season" rollover button, etc. Already applied and
+-- set to 2026 (confirmed live via the REST API) — property_settings here is
+-- the same odd key/value-row table as owner_lock_code/lockbox_code above,
+-- so this column exists (and carries the same value) on every row, not just
+-- one. Documented here to match the rest of this file's practice, not
+-- something these statements still need to apply.
+--
+-- ALTER TABLE property_settings ADD COLUMN IF NOT EXISTS active_season_year integer DEFAULT 2026;
+-- UPDATE property_settings SET active_season_year = 2026;

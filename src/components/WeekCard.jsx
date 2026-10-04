@@ -49,7 +49,10 @@ function ganttMetrics(weekStart, startDate, endDate) {
 }
 
 // A single proportional pill. Hides name text when pill is very narrow.
-function GanttPill({ name, dates, badge, weekStart, colorClass }) {
+// onClick is optional — used by season-invite chips to open their own modal
+// instead of the week card's; stops propagation so the card's own onClick
+// (the "open this week" handler) doesn't also fire.
+function GanttPill({ name, dates, badge, weekStart, colorClass, onClick }) {
   const { leftPct, widthPct } = ganttMetrics(weekStart, dates.start, dates.end)
 
   const isNarrow   = widthPct < 30
@@ -58,6 +61,7 @@ function GanttPill({ name, dates, badge, weekStart, colorClass }) {
   return (
     <div className="relative w-full h-7">
       <span
+        onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
         className={`absolute inset-y-0 flex items-center rounded-full text-xs font-semibold overflow-hidden ${colorClass}`}
         style={{ left: `${leftPct}%`, width: `${widthPct}%`, minWidth: '1.25rem' }}
         title={`${name}${dates ? ` · ${inlineDates(dates)}` : ''}`}
@@ -79,6 +83,29 @@ function GanttPill({ name, dates, badge, weekStart, colorClass }) {
       </span>
     </div>
   )
+}
+
+// Season-invite chip colors by status — confirmed/lease rows read as a real
+// booking (same solid green as a renter chip), sent is a lighter/muted
+// green (outreach is out but nothing's confirmed yet), not_sent is neutral
+// gray. declined/not_returning are never passed in here — WeekCard filters
+// them out before rendering, since the brief says not to show them at all.
+function inviteColorClass(status) {
+  switch (status) {
+    case 'confirmed':
+    case 'lease_created':
+    case 'lease_sent':
+    case 'lease_signed':
+      return 'bg-green-100 text-green-700'
+    case 'sent':
+      return 'bg-green-50 text-green-600'
+    default:
+      return 'bg-gray-100 text-gray-500'
+  }
+}
+
+function firstName(fullName) {
+  return (fullName || 'Unknown').trim().split(/\s+/)[0]
 }
 
 function RenterChip({ renter, weekStart }) {
@@ -106,7 +133,7 @@ function RenterChip({ renter, weekStart }) {
   )
 }
 
-export default function WeekCard({ week, ownerUseRow, appointments, commentOverride, caretakerNote, isAdmin, onClick }) {
+export default function WeekCard({ week, ownerUseRow, appointments, commentOverride, caretakerNote, isAdmin, onClick, seasonInvites = [], onSelectInvite }) {
   const { weekStart, type, isOwnerSheet, comment, renterInfo, totalRent, renters, startDate, endDate } = week
   const weekKey     = toISODate(weekStart)
   const isOwner     = isOwnerSheet || !!ownerUseRow
@@ -115,6 +142,19 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
   const weekAppts         = appointments.filter(a => a.week_start === weekKey)
   const hasComment        = !!(commentOverride?.comment ?? comment)
   const hasCaretakerNote  = !!(caretakerNote?.note)
+
+  // Next season's invite chips — half-open overlap, same convention as the
+  // rental-week matching in buildCalendar(). Never shown to caretakers, and
+  // declined/not_returning invites are never shown at all (per the brief).
+  const weekEndExclusive = new Date(weekStart)
+  weekEndExclusive.setDate(weekEndExclusive.getDate() + 7)
+  const weekInvites = isAdmin ? seasonInvites.filter(inv => {
+    if (inv.status === 'declined' || inv.status === 'not_returning') return false
+    if (!inv.proposed_start || !inv.proposed_end) return false
+    const invStart = parseDateLocal(inv.proposed_start)
+    const invEnd   = parseDateLocal(inv.proposed_end)
+    return invStart.getTime() < weekEndExclusive.getTime() && invEnd.getTime() > weekStart.getTime()
+  }) : []
 
   const apptIcon = (type) => type === 'cleaning' ? '🧹' : type === 'exterminator' ? '🦟' : type === 'other' ? '📌' : '🔨'
   const fmtApptDate = (dateStr) => {
@@ -158,10 +198,26 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
             </div>
           )}
 
-          {resolvedType === 'vacant' && (
+          {resolvedType === 'vacant' && weekInvites.length === 0 && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-gray-100 text-gray-500">
               VACANT
             </span>
+          )}
+
+          {weekInvites.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {weekInvites.map(inv => (
+                <GanttPill
+                  key={inv.id}
+                  name={firstName(inv.renters?.name)}
+                  dates={{ start: parseDateLocal(inv.proposed_start), end: parseDateLocal(inv.proposed_end) }}
+                  badge={null}
+                  weekStart={weekStart}
+                  colorClass={inviteColorClass(inv.status)}
+                  onClick={() => onSelectInvite?.(inv)}
+                />
+              ))}
+            </div>
           )}
 
           {resolvedType === 'renter' && renterInfo?.dates?.start && renterInfo?.dates?.end ? (

@@ -138,9 +138,9 @@ function prevSunday(date) {
   return d
 }
 
-export function buildCalendar(entries, appointments = []) {
+export function buildCalendar(entries, appointments = [], extraDates = []) {
   const valid = entries.filter(e => e.startDate && e.endDate)
-  if (!valid.length) return []
+  if (!valid.length && extraDates.length === 0) return []
 
   // Factor in appointment dates so weeks before the first rental
   // but with appointments are included in the calendar.
@@ -152,13 +152,18 @@ export function buildCalendar(entries, appointments = []) {
     })
     .filter(d => !isNaN(d.getTime()))
 
+  // extraDates widens the week-slot range without affecting overlap/type
+  // logic below — used for things like next season's invite proposals,
+  // which need their weeks to exist on the calendar but aren't "entries".
   const allStartMs = [
     ...valid.map(e => e.startDate.getTime()),
     ...apptDates.map(d => d.getTime()),
+    ...extraDates.map(d => d.getTime()),
   ]
   const allEndMs = [
     ...valid.map(e => e.endDate.getTime()),
     ...apptDates.map(d => d.getTime()),
+    ...extraDates.map(d => d.getTime()),
   ]
   const minStart  = new Date(Math.min(...allStartMs))
   const maxEnd    = new Date(Math.max(...allEndMs))

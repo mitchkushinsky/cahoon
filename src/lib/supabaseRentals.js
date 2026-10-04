@@ -63,12 +63,20 @@ function rentalToEntry(rental, renter) {
  * @param {Array} rentals      - Rows from the rentals table
  * @param {Array} renters      - Rows from the renters table
  * @param {Array} appointments - Rows from the appointments table (for week range)
+ * @param {Array} seasonInvites - Rows from the season_invites table. Their
+ *   proposed_start/proposed_end widen the calendar's week range so next
+ *   season's invite weeks exist to render a chip on, even before any rental
+ *   exists for them — doesn't affect rental/owner-use overlap logic at all.
  * @returns {Array}            - Same week-array shape as parseCSV()
  */
-export function buildSupabaseCalendar(rentals, renters, appointments = []) {
+export function buildSupabaseCalendar(rentals, renters, appointments = [], seasonInvites = []) {
   const renterMap = Object.fromEntries((renters || []).map(r => [r.id, r]))
   const entries = (rentals || [])
     .map(r => rentalToEntry(r, renterMap[r.renter_id]))
     .filter(Boolean)
-  return buildCalendar(entries, appointments)
+  const inviteDates = (seasonInvites || [])
+    .flatMap(i => [i.proposed_start, i.proposed_end])
+    .filter(Boolean)
+    .map(parseLocalDate)
+  return buildCalendar(entries, appointments, inviteDates)
 }
