@@ -48,8 +48,9 @@ function groupTasksByCategory(tasks) {
 // One pending-task row — factored out so the flat list and the grouped-by-
 // category list (below) render identical cards instead of two copies that
 // could drift.
-function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, onComplete, onEdit, onConfirmDelete, onCancelDelete, onDelete }) {
+function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, isExpanded, onToggleExpand, onComplete, onEdit, onConfirmDelete, onCancelDelete, onDelete }) {
   const due = formatDue(task.due_date)
+  const hasNotes = !!task.notes
   return (
     <div style={collapseStyle(isCollapsing)}>
       <div className={`bg-white border border-gray-200 rounded-xl ${isCompleting ? 'task-flash' : ''}`}>
@@ -72,9 +73,12 @@ function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, onComp
             </div>
           </div>
         ) : (
-          <div className="px-4 py-3 flex items-start gap-3">
+          <div
+            onClick={hasNotes ? () => onToggleExpand(task.id) : undefined}
+            className={`px-4 py-3 flex items-start gap-3 ${hasNotes ? 'cursor-pointer' : ''}`}
+          >
             <button
-              onClick={() => onComplete(task)}
+              onClick={(e) => { e.stopPropagation(); onComplete(task) }}
               disabled={isCompleting}
               className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-green-400 disabled:cursor-default transition-colors text-base leading-none"
               aria-label="Mark complete"
@@ -88,27 +92,35 @@ function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, onComp
               {due && (
                 <p className={`text-xs mt-0.5 ${due.cls}`}>{due.text}</p>
               )}
-              {task.notes && (
+              {isExpanded && hasNotes && (
                 <p className="text-xs text-gray-400 mt-1 leading-snug">{task.notes}</p>
               )}
             </div>
             {isAdmin && !isCompleting && (
               <div className="flex gap-0.5 flex-shrink-0 -mr-1">
                 <button
-                  onClick={() => onEdit(task)}
+                  onClick={(e) => { e.stopPropagation(); onEdit(task) }}
                   className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors leading-none"
                   title="Edit"
                 >
                   ✏️
                 </button>
                 <button
-                  onClick={() => onConfirmDelete(task.id)}
+                  onClick={(e) => { e.stopPropagation(); onConfirmDelete(task.id) }}
                   className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors leading-none"
                   title="Delete"
                 >
                   🗑️
                 </button>
               </div>
+            )}
+            {hasNotes && (
+              <span
+                className={`flex-shrink-0 mt-1.5 text-gray-300 text-sm transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              >
+                ›
+              </span>
             )}
           </div>
         )}
@@ -127,6 +139,7 @@ const collapseStyle = (collapsing) =>
 export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefresh }) {
   const [completingIds, setCompletingIds] = useState(new Set())
   const [collapsingIds, setCollapsingIds] = useState(new Set())
+  const [expandedIds, setExpandedIds]     = useState(new Set())
   const [showForm, setShowForm]           = useState(false)
   const [editingTask, setEditingTask]     = useState(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -151,6 +164,16 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
       setCollapsingIds(prev => new Set([...prev, task.id]))
       setTimeout(() => onRefresh(), 400)
     }, 1500)
+  }
+
+  // Expand/collapse is per-task and independent — toggling one never
+  // affects any other task's expanded state.
+  const toggleExpanded = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   const openAdd = () => {
@@ -285,6 +308,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
           onConfirmDelete: setConfirmDeleteId,
           onCancelDelete: () => setConfirmDeleteId(null),
           onDelete: handleDelete,
+          onToggleExpand: toggleExpanded,
         }
         const hasCategorized = tasks.some(t => t.category)
         if (!hasCategorized) {
@@ -297,6 +321,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
                   isCompleting={completingIds.has(task.id)}
                   isCollapsing={collapsingIds.has(task.id)}
                   isConfirm={confirmDeleteId === task.id}
+                  isExpanded={expandedIds.has(task.id)}
                   {...cardProps}
                 />
               ))}
@@ -313,6 +338,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
                 isCompleting={completingIds.has(task.id)}
                 isCollapsing={collapsingIds.has(task.id)}
                 isConfirm={confirmDeleteId === task.id}
+                isExpanded={expandedIds.has(task.id)}
                 {...cardProps}
               />
             ))}
