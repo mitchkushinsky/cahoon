@@ -27,9 +27,10 @@ const TASK_CATEGORIES = [
   { value: '',                 label: 'None' },
   { value: 'winterize',        label: 'Winterize' },
   { value: 'new_season_setup', label: 'New Season Setup' },
+  { value: 'larger_projects',  label: 'Larger Projects' },
 ]
 
-// Buckets pending tasks into the three groups, preserving each task's
+// Buckets pending tasks into the four groups, preserving each task's
 // existing relative order (already due_date-sorted by the query in App.jsx —
 // this only partitions that order, never re-sorts it). Grouping is an
 // all-or-nothing decision across the whole list: if nothing has a category
@@ -37,10 +38,12 @@ const TASK_CATEGORIES = [
 function groupTasksByCategory(tasks) {
   const winterize = tasks.filter(t => t.category === 'winterize')
   const newSeasonSetup = tasks.filter(t => t.category === 'new_season_setup')
-  const general = tasks.filter(t => t.category !== 'winterize' && t.category !== 'new_season_setup')
+  const largerProjects = tasks.filter(t => t.category === 'larger_projects')
+  const general = tasks.filter(t => t.category !== 'winterize' && t.category !== 'new_season_setup' && t.category !== 'larger_projects')
   return [
     { key: 'winterize', label: 'Winterize', tasks: winterize },
     { key: 'new_season_setup', label: 'New Season Setup', tasks: newSeasonSetup },
+    { key: 'larger_projects', label: 'Larger Projects', tasks: largerProjects },
     { key: 'general', label: 'General', tasks: general },
   ].filter(g => g.tasks.length > 0)
 }
