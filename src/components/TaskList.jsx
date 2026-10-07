@@ -51,6 +51,7 @@ function groupTasksByCategory(tasks) {
 function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, isExpanded, onToggleExpand, onComplete, onEdit, onConfirmDelete, onCancelDelete, onDelete }) {
   const due = formatDue(task.due_date)
   const hasNotes = !!task.notes
+  const categoryLabel = TASK_CATEGORIES.find(c => c.value === task.category)?.label || null
   return (
     <div style={collapseStyle(isCollapsing)}>
       <div className={`bg-white border border-gray-200 rounded-xl ${isCompleting ? 'task-flash' : ''}`}>
@@ -74,8 +75,8 @@ function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, isExpa
           </div>
         ) : (
           <div
-            onClick={hasNotes ? () => onToggleExpand(task.id) : undefined}
-            className={`px-4 py-3 flex items-start gap-3 ${hasNotes ? 'cursor-pointer' : ''}`}
+            onClick={() => onToggleExpand(task.id)}
+            className="px-4 py-3 flex items-start gap-3 cursor-pointer"
           >
             <button
               onClick={(e) => { e.stopPropagation(); onComplete(task) }}
@@ -92,8 +93,19 @@ function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, isExpa
               {due && (
                 <p className={`text-xs mt-0.5 ${due.cls}`}>{due.text}</p>
               )}
-              {isExpanded && hasNotes && (
-                <p className="text-xs text-gray-400 mt-1 leading-snug">{task.notes}</p>
+              {isExpanded && (
+                <div className="text-xs text-gray-400 mt-1 leading-snug">
+                  {hasNotes ? (
+                    <p>{task.notes}</p>
+                  ) : due || categoryLabel ? (
+                    <>
+                      {due && <p>{due.text}</p>}
+                      {categoryLabel && <p>{categoryLabel}</p>}
+                    </>
+                  ) : (
+                    <p>No details</p>
+                  )}
+                </div>
               )}
             </div>
             {isAdmin && !isCompleting && (
@@ -114,14 +126,12 @@ function TaskCard({ task, isAdmin, isCompleting, isCollapsing, isConfirm, isExpa
                 </button>
               </div>
             )}
-            {hasNotes && (
-              <span
-                className={`flex-shrink-0 mt-1.5 text-gray-300 text-sm transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
-                aria-hidden="true"
-              >
-                ›
-              </span>
-            )}
+            <span
+              className={`flex-shrink-0 mt-1.5 text-gray-500 text-sm transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+              aria-hidden="true"
+            >
+              ›
+            </span>
           </div>
         )}
       </div>
