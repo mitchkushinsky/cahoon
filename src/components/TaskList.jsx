@@ -206,24 +206,22 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
         <h2 className="text-sm font-bold text-gray-700">
           📋 {isAdmin ? 'Tasks' : 'Tasks from Mitch'}
         </h2>
-        {isAdmin && (
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCompleted(v => !v)}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {showCompleted ? 'Hide Completed' : 'Show Completed'}
+          </button>
+          {isAdmin && !showForm && (
             <button
-              onClick={() => setShowCompleted(v => !v)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              onClick={openAdd}
+              className="text-sm text-blue-600 font-medium hover:underline"
             >
-              {showCompleted ? 'Hide Completed' : 'Show Completed'}
+              + Add Task
             </button>
-            {!showForm && (
-              <button
-                onClick={openAdd}
-                className="text-sm text-blue-600 font-medium hover:underline"
-              >
-                + Add Task
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Add / Edit form */}
@@ -327,7 +325,7 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
       )}
 
       {/* Completed tasks */}
-      {isAdmin && showCompleted && completedTasks.length > 0 && (
+      {showCompleted && completedTasks.length > 0 && (
         <div className="mt-3">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex-1 h-px bg-gray-100" />
@@ -364,14 +362,19 @@ export default function TaskList({ tasks, completedTasks = [], isAdmin, onRefres
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-400 line-through">{task.title}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{formatCompleted(task.completed_at)}</p>
+                          {task.notes && (
+                            <p className="text-xs text-gray-400 mt-1 leading-snug">{task.notes}</p>
+                          )}
                         </div>
-                        <button
-                          onClick={() => setConfirmDeleteId(task.id)}
-                          className="p-1.5 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors leading-none flex-shrink-0 -mr-1"
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setConfirmDeleteId(task.id)}
+                            className="p-1.5 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors leading-none flex-shrink-0 -mr-1"
+                            title="Delete"
+                          >
+                            🗑️
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
