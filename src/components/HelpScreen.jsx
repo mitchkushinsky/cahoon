@@ -117,6 +117,17 @@ export default function HelpScreen({ onClose, isAdmin }) {
               <Row icon="🦟">Exterminator scheduled</Row>
               <Row icon="💬">Owner note exists</Row>
               <Row icon="📋">Caretaker note exists</Row>
+              <Row icon="📝">Renter note exists</Row>
+            </div>
+
+            <Sub>Next season's invite chips</Sub>
+            <div className="space-y-1">
+              <P>Once renters are invited back for next season (see <B>Invites</B> under Settings), their proposed week shows on the calendar too — same card, further down the list.</P>
+              <Row icon="🟢">Solid green — confirmed, or a lease has been created/sent/signed</Row>
+              <Row icon="🟡">Amber — invite sent, not yet confirmed</Row>
+              <Row icon="⬜">Gray — not sent yet</Row>
+              <Row icon="•">Declined or Not Returning — hidden from the calendar entirely</Row>
+              <P>Tap a chip to open that invite's details. These chips are owner-only — caretakers don't see them.</P>
             </div>
           </Section>
 
@@ -149,18 +160,31 @@ export default function HelpScreen({ onClose, isAdmin }) {
             <P>Tap a Vacant week to:</P>
             <div className="space-y-1.5 mt-1">
               <Row icon="👤"><span><B>Assign Renter</B> — pick from your renter list or add a new one. Dates and payment milestones auto-calculate.</span></Row>
-              <Row icon="🏠"><span><B>Mark as Owner Use</B> — mark weeks you'll be using the property.</span></Row>
+              <Row icon="🏠"><span><B>Mark as Owner Use</B> — mark weeks you'll be using the property. Start and end dates default to the full week but can be adjusted with the date pickers for a partial-week stay (e.g. arriving Wednesday) — the app warns if your dates overlap an existing rental.</span></Row>
               <Row icon="🧹"><span><B>Add Appointment</B> — schedule a cleaning, repair, or exterminator.</span></Row>
             </div>
           </Section>
 
           <Section icon="✅" title="Tasks">
-            {isAdmin ? (
+            <P>Tap <B>Tasks</B> in the header to open the task list — it's a separate screen now, not on the calendar itself. A red badge shows how many tasks are still incomplete, in both your view and the caretaker's.</P>
+
+            {isAdmin && (
               <>
-                <P>Add tasks for your caretaker using <B>+ Add Task</B>. Tasks appear at the top of the calendar in both your view and the caretaker's view. Set a due date to flag urgency.</P>
+                <Sub>Adding and editing</Sub>
+                <P>Tap <B>+ Add Task</B> to create one — title, optional notes, due date, and category. Tap the ✏️ pencil on any task to edit it, or 🗑️ to delete.</P>
+
+                <Sub>Categories</Sub>
+                <P>Group tasks under <B>Winterize</B>, <B>New Season Setup</B>, or <B>Larger Projects</B>. Tasks share a category automatically group under that heading in the list; tasks with no category stay in a flat "General" list.</P>
               </>
+            )}
+
+            <Sub>Expanding a task</Sub>
+            <P>Tap anywhere on a task row to expand it and see its notes, due date, and category — tap again to collapse. The chevron (›) on the right rotates down when expanded.</P>
+
+            {isAdmin ? (
+              <P>Tap the circle to mark a task complete — it flashes green, then moves into <B>Show Completed</B> at the bottom of the list.</P>
             ) : (
-              <P>Tasks from your property owner appear here. Tap the checkbox when complete — they'll disappear from your list.</P>
+              <P>Tap the circle when a task is done — it disappears from your pending list. You can read notes on any task, including completed ones, but can't add, edit, or delete tasks.</P>
             )}
           </Section>
 
@@ -200,6 +224,20 @@ export default function HelpScreen({ onClose, isAdmin }) {
                 <Row icon="•">Upload a CSV file to import rental history for any year</Row>
                 <Row icon="•">Choose the season year, upload the file, review any conflicts</Row>
                 <Row icon="•">Conflicts show both the existing and incoming renter so you can choose which to keep</Row>
+              </div>
+
+              <Sub>Property tab</Sub>
+              <div className="space-y-1">
+                <Row icon="•">Set the Owner Smart Lock Code and Lock Box Code shown in Owner Use weeks</Row>
+                <Row icon="•"><span><B>Start [Year] Season</B> — appears once the current season's last rental has ended. Confirming switches the whole app (calendar, financials, everything) over to the next season year. This can't easily be undone, so it only shows up when it's actually time.</span></Row>
+              </div>
+
+              <Sub>Invites tab (next season's outreach)</Sub>
+              <div className="space-y-1">
+                <Row icon="•">Lists renters eligible to be invited back for next season, with a proposed week and rent pre-filled one year ahead of their most recent stay</Row>
+                <Row icon="•">Status progression: Not Sent → Sent → Confirmed → Lease Created → Lease Sent → Lease Signed, with Declined / Not Returning as exit states</Row>
+                <Row icon="•"><span>Tap <B>Preview &amp; Copy Email</B> to see the invite email before sending it yourself, then <B>Mark as Sent</B></span></Row>
+                <Row icon="•"><span><B>Create Lease</B> (on a confirmed invite) or <B>Create Leases</B> (bulk, for all confirmed invites) generates a lease document and moves status to Lease Created automatically</span></Row>
               </div>
             </Section>
           )}
@@ -265,13 +303,15 @@ export default function HelpScreen({ onClose, isAdmin }) {
                 <Row icon="•">Rental dates</Row>
                 <Row icon="•">Caretaker notes (you can read and edit these)</Row>
                 <Row icon="•">Appointments</Row>
+                <Row icon="•">Tasks, in their own tab — a badge shows how many are still incomplete. You can read task notes and mark tasks complete, but not add, edit, or delete them.</Row>
               </div>
 
               <Sub>What's hidden</Sub>
               <div className="space-y-1">
                 <Row icon="•">All payment and financial information</Row>
                 <Row icon="•">Lease documents</Row>
-                <Row icon="•">Owner private notes</Row>
+                <Row icon="•">Owner private notes, including renter notes (📝)</Row>
+                <Row icon="•">Next season's invite chips on the calendar</Row>
                 <Row icon="•">Settings, Import Calendar, and reminder banners</Row>
               </div>
             </Section>

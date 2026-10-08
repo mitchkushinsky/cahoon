@@ -30,7 +30,10 @@ function InviteRow({ renter, invite, onSelect }) {
       className="flex items-center justify-between px-4 py-3 gap-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900">{renter.name}</p>
+        <p className="text-sm font-medium text-gray-900 flex items-center gap-1">
+          <span className="truncate">{renter.name}</span>
+          {invite.notes && <span title="Has notes" className="flex-shrink-0 text-gray-400 text-xs">📝</span>}
+        </p>
         <p className="text-xs text-gray-400 mt-0.5">
           {fmtDateRange(invite.proposed_start, invite.proposed_end)} · {fmtMoney(invite.proposed_rent)}
         </p>

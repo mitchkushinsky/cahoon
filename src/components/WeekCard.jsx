@@ -142,6 +142,12 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
   const weekAppts         = appointments.filter(a => a.week_start === weekKey)
   const hasComment        = !!(commentOverride?.comment ?? comment)
   const hasCaretakerNote  = !!(caretakerNote?.note)
+  // Renter-level notes (renters.notes, set from the Renters tab in
+  // Settings) — distinct from the week-level caretaker note above, so it
+  // gets its own icon rather than folding into hasCaretakerNote.
+  const hasRenterNote     = resolvedType === 'split'
+    ? !!renters?.some(r => r.renterInfo?.notes)
+    : !!renterInfo?.notes
 
   // Next season's invite chips — half-open overlap, same convention as the
   // rental-week matching in buildCalendar(). Never shown to caretakers, and
@@ -249,6 +255,7 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
         <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
           {isAdmin && hasComment      && <span title="Owner comment" className="text-gray-400 text-sm">💬</span>}
           {hasCaretakerNote           && <span title={isAdmin ? "Caretaker note" : "Note"} className="text-gray-400 text-sm">📋</span>}
+          {isAdmin && hasRenterNote   && <span title="Renter note" className="text-gray-400 text-sm">📝</span>}
         </div>
       </div>
 

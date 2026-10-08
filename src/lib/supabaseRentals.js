@@ -52,6 +52,7 @@ function rentalToEntry(rental, renter) {
       email,
       dates: { start: startDate, end: endDate },
       smartLockCombo: rental.smart_lock_combo || null,
+      notes: renter?.notes || null,
     },
   }
 }
