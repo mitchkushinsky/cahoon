@@ -217,7 +217,7 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
                   key={inv.id}
                   name={firstName(inv.renters?.name)}
                   dates={{ start: parseDateLocal(inv.proposed_start), end: parseDateLocal(inv.proposed_end) }}
-                  badge={null}
+                  badge={inv.notes ? { emoji: '📝' } : null}
                   weekStart={weekStart}
                   colorClass={inviteColorClass(inv.status)}
                   onClick={() => onSelectInvite?.(inv)}
