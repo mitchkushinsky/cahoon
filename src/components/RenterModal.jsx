@@ -226,7 +226,47 @@ export default function RenterModal({ week, appointments, commentOverride, caret
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const { milestones, totalPaid, totalDueNow, totalCredit, hasMismatch, badge } = computePayment(week)
+  const computedPayment = computePayment(week)
+  // A rental created via "Convert to 2027 Rental" (convertToRental,
+  // seasonInvites.js) has total_rent set but no per-milestone owed amounts
+  // — deposit_owed/payment1_owed/payment2_owed/payment3_owed are all null
+  // in the rentals row, since that flow never writes them. computePayment
+  // reads those stored columns directly, so every milestone comes back
+  // amountOwed: 0 even though total_rent is correct and a real $500
+  // deposit is obviously due — that's what was hiding Add Payment (nothing
+  // reads as owed, so nothing reads as unpaid) and what was firing the
+  // mismatch warning (total_rent > 0 but the stored amounts sum to 0).
+  // total_rent itself was never the problem.
+  //
+  // Detected by source === 'season_invite', the exact tag convertToRental
+  // sets and the only thing that reliably distinguishes this case from a
+  // legacy CSV-imported rental that happens to have an incomplete
+  // milestone split for its own, unrelated reasons (two existing rows do,
+  // confirmed against live data) — those must keep showing their real
+  // stored amounts and their real mismatch warning untouched, not get
+  // silently papered over by this fallback.
+  //
+  // Reuses calcMilestones(totalRent) below — the same 500/half/half split
+  // EditRentalForm already writes into the rentals row whenever total_rent
+  // changes through the normal edit flow — so this is display-only until
+  // that happens for real: a genuine "Edit Rental" save persists real
+  // milestones and this fallback stops applying on its own (the stored
+  // amounts are no longer all zero).
+  const needsComputedMilestones = source === 'season_invite' && totalRent > 0 &&
+    computedPayment.milestones.every(m => m.amountOwed === 0)
+  const fallbackOwed = needsComputedMilestones ? calcMilestones(totalRent) : null
+  const milestones = needsComputedMilestones
+    ? computedPayment.milestones.map((m, i) => {
+        const owed = [fallbackOwed.payment1_owed, fallbackOwed.payment2_owed, fallbackOwed.payment3_owed][i] || 0
+        return { ...m, amountOwed: owed, amountDueNow: m.isDue ? owed : 0 }
+      })
+    : computedPayment.milestones
+  // Always true once real amounts are derived: deposit + payment2 +
+  // payment3 sum to exactly total_rent by construction (same identity
+  // calcMilestones already guarantees everywhere else it's used) — not a
+  // suppression, the numbers genuinely stop mismatching.
+  const hasMismatch = needsComputedMilestones ? false : computedPayment.hasMismatch
+  const { totalPaid, totalCredit, badge } = computedPayment
   const balanceRemaining = Math.max(0, totalRent - totalPaid)
   const weekAppts = appointments.filter(a => a.week_start === toISODate(weekStart))
 
@@ -309,7 +349,7 @@ export default function RenterModal({ week, appointments, commentOverride, caret
           {hasMismatch && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
               <span className="text-base flex-shrink-0">⚠️</span>
-              <span>Total rent mismatch — please check the spreadsheet.</span>
+              <span>Total rent mismatch — please verify the payment amounts.</span>
             </div>
           )}
 
