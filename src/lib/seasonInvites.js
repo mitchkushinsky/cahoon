@@ -179,3 +179,66 @@ export function buildInviteEmailPreview(invite, renter) {
     plain: renderPlain(merged),
   }
 }
+
+// ─── Heads Up email template ─────────────────────────────────────────────────
+// Sent once a lease has gone out (status lease_created or later) to flag that
+// an eSignatures.com lease is on its way and a signing deposit is due.
+
+export const SEASON_INVITE_HEADS_UP_SUBJECT = 'Cahoon Lease to e-sign'
+
+export const SEASON_INVITE_HEADS_UP_TEMPLATE = `Hi <FirstName>,
+
+I just wanted to let you know that you should be receiving a lease for <RentalYear> through eSignatures.com. Please e-sign it and also send $<SigningDepositOwed>.
+
+You can pay me through:
+
+Venmo (@Mitchell-Kushinsky)
+Zelle to mitch.kushinsky@gmail.com
+USPS to:
+  215 W 91st Street
+  Apt. 23
+  New York, NY 10024
+
+Thanks and let me know if you have any questions.
+
+Mitch`
+
+const FIXED_SIGNING_DEPOSIT = 500
+
+// Formats the deposit amount as "X,XXX.00" — no leading "$": the template
+// body above already supplies its own literal "$" immediately before
+// <SigningDepositOwed>, so the merge field itself must be bare digits or the
+// rendered email would read "$$500.00".
+function fmtDepositAmount(n) {
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0)
+}
+
+// depositPaid is the amount already recorded against the fixed $500 signing
+// deposit for this renter's RentalYear — not yet wired to a real payment
+// lookup (2027 has no rentals/payments rows yet, per the brief), so every
+// call site defaults it to 0, which always nets out to the full $500.00.
+// Once 2027 payments exist, a caller can resolve the matching rental's
+// payment1_amount (see supabaseRentals.js) and pass it in here — the
+// remaining-balance math already handles a partial payment correctly.
+export function buildHeadsUpMergeFields(invite, renter, depositPaid = 0) {
+  const start = parseLocalISODate(invite?.proposed_start)
+  const year = start ? start.getFullYear() : new Date().getFullYear() + 1
+  const remaining = Math.max(0, FIXED_SIGNING_DEPOSIT - (depositPaid || 0))
+  return {
+    FirstName: firstName(renter?.name),
+    RentalYear: String(year),
+    SigningDepositOwed: fmtDepositAmount(remaining),
+  }
+}
+
+export function buildHeadsUpEmailPreview(invite, renter, depositPaid = 0) {
+  const mergeFields = buildHeadsUpMergeFields(invite, renter, depositPaid)
+  const subject = mergeTemplate(SEASON_INVITE_HEADS_UP_SUBJECT, mergeFields)
+  const merged = mergeTemplate(SEASON_INVITE_HEADS_UP_TEMPLATE, mergeFields)
+  return {
+    email: renter?.email || '',
+    subject,
+    html: renderHtml(merged),
+    plain: renderPlain(merged),
+  }
+}

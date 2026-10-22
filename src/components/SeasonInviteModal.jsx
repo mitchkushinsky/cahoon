@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { STATUS_META, STATUS_OPTIONS, fmtMoney, buildInviteEmailPreview } from '../lib/seasonInvites'
+import { STATUS_META, STATUS_OPTIONS, fmtMoney, buildInviteEmailPreview, buildHeadsUpEmailPreview } from '../lib/seasonInvites'
 import SeasonInviteEmailModal from './SeasonInviteEmailModal'
+import SeasonInviteHeadsUpModal from './SeasonInviteHeadsUpModal'
+
+// Statuses from which the lease has already gone out, so a "Heads Up"
+// nudge (lease is coming via eSignatures.com, deposit is due) is relevant —
+// mirrors the lease_created -> lease_sent -> lease_signed tail of
+// STATUS_OPTIONS in seasonInvites.js.
+const HEADS_UP_STATUSES = ['lease_created', 'lease_sent', 'lease_signed']
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
 
@@ -14,6 +21,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [showHeadsUpPreview, setShowHeadsUpPreview] = useState(false)
   const [generatingLease, setGeneratingLease] = useState(false)
   const [leaseError, setLeaseError] = useState(null)
 
@@ -93,6 +101,10 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
   }
 
   const preview = buildInviteEmailPreview(invite, renter)
+  // depositPaid defaults to 0 inside buildHeadsUpEmailPreview — no 2027
+  // payment lookup is wired up yet (see seasonInvites.js), so this always
+  // nets out to the full $500.00 for now.
+  const headsUpPreview = buildHeadsUpEmailPreview(invite, renter)
   const statusMeta = STATUS_META[invite.status] || STATUS_META.not_sent
 
   return (
@@ -244,6 +256,14 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
               {generatingLease ? 'Creating Lease…' : 'Create Lease'}
             </button>
           )}
+          {HEADS_UP_STATUSES.includes(invite.status) && (
+            <button
+              onClick={() => setShowHeadsUpPreview(true)}
+              className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Preview Heads Up Email
+            </button>
+          )}
         </div>
 
       </div>
@@ -255,6 +275,16 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
           html={preview.html}
           plain={preview.plain}
           onClose={() => setShowPreview(false)}
+        />
+      )}
+
+      {showHeadsUpPreview && (
+        <SeasonInviteHeadsUpModal
+          email={headsUpPreview.email}
+          subject={headsUpPreview.subject}
+          html={headsUpPreview.html}
+          plain={headsUpPreview.plain}
+          onClose={() => setShowHeadsUpPreview(false)}
         />
       )}
     </div>
