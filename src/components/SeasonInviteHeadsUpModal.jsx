@@ -42,7 +42,7 @@ function CopyButton({ label, text, id, copiedKey, onCopy }) {
   )
 }
 
-export default function SeasonInviteHeadsUpModal({ email, subject, html, plain, onClose }) {
+export default function SeasonInviteHeadsUpModal({ email, subject, html, plain, onClose, onMarkSent, markSentDisabled }) {
   const { copiedKey, copy } = useCopyButton()
   const mailtoUrl = buildMailto(email, subject, plain)
 
@@ -92,13 +92,20 @@ export default function SeasonInviteHeadsUpModal({ email, subject, html, plain, 
         />
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
+        <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 space-y-2">
           <a
             href={mailtoUrl}
             className="block w-full text-center text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 transition-colors"
           >
             Open in Mail
           </a>
+          <button
+            onClick={onMarkSent}
+            disabled={markSentDisabled}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
+          >
+            Mark as Sent ✓
+          </button>
         </div>
 
       </div>

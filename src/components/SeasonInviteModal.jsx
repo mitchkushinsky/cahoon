@@ -62,6 +62,14 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
     persist({ status: 'sent' })
   }
 
+  // Mirrors handleMarkSent above, but for the lease-heads-up step: sets
+  // status to "lease_sent" (not "sent" — that's the original season-invite
+  // step) and closes the nested Heads Up modal once the write completes.
+  const handleMarkLeaseSent = async () => {
+    await persist({ status: 'lease_sent' })
+    setShowHeadsUpPreview(false)
+  }
+
   const handleSaveNotes = async () => {
     const ok = await persist({ notes: notes.trim() || null })
     if (ok) {
@@ -238,14 +246,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
             onClick={() => setShowPreview(true)}
             className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Preview & Copy Email
-          </button>
-          <button
-            onClick={handleMarkSent}
-            disabled={invite.status === 'sent'}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
-          >
-            Mark as Sent ✓
+            Preview Interest Email
           </button>
           {invite.status === 'confirmed' && (
             <button
@@ -261,9 +262,16 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
               onClick={() => setShowHeadsUpPreview(true)}
               className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              Preview Heads Up Email
+              Preview Lease Heads Up Email
             </button>
           )}
+          <button
+            onClick={handleMarkSent}
+            disabled={invite.status === 'sent'}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
+          >
+            Mark as Sent ✓
+          </button>
         </div>
 
       </div>
@@ -285,6 +293,8 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
           html={headsUpPreview.html}
           plain={headsUpPreview.plain}
           onClose={() => setShowHeadsUpPreview(false)}
+          onMarkSent={handleMarkLeaseSent}
+          markSentDisabled={invite.status === 'lease_sent'}
         />
       )}
     </div>
