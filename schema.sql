@@ -107,3 +107,15 @@ create policy "public access" on comment_overrides for all using (true) with che
 --
 -- ALTER TABLE property_settings ADD COLUMN IF NOT EXISTS active_season_year integer DEFAULT 2026;
 -- UPDATE property_settings SET active_season_year = 2026;
+
+-- Convert to 2027 Rental (Season Invites): links a season_invites row to the
+-- real rentals row convertToRental() (src/lib/seasonInvites.js) creates once
+-- a lease is signed, so the "Convert to 2027 Rental" button can tell whether
+-- a given invite already has one and switch to "View 2027 Rental →" instead
+-- of offering to create a duplicate. Already applied (confirmed live via the
+-- REST API — every season_invites row already carries a rental_id key,
+-- currently null on all of them) — documented here to match the rest of
+-- this file's practice of recording a migration whether or not it still
+-- needs to run.
+--
+-- ALTER TABLE season_invites ADD COLUMN IF NOT EXISTS rental_id uuid REFERENCES rentals(id);

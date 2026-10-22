@@ -1,4 +1,5 @@
 import { mergeTemplate, renderHtml, renderPlain } from './reminders'
+import { supabase } from './supabase'
 
 // Shared between the list row badge and the detail modal's status selector
 // so the two never drift out of sync on label/color. selectorLabel is only
@@ -241,4 +242,62 @@ export function buildHeadsUpEmailPreview(invite, renter, depositPaid = 0) {
     html: renderHtml(merged),
     plain: renderPlain(merged),
   }
+}
+
+// ─── Convert a signed invite into a real rental ──────────────────────────────
+
+const CONVERT_SEASON_YEAR = 2027
+
+// Materializes a season_invite's proposed week as a real rentals row, so the
+// calendar can show it as an owned/payable rental rather than a provisional
+// invite chip. Idempotent by (renter_id, season_year): a second call for the
+// same renter and season returns the existing rental instead of creating a
+// duplicate, and always makes sure the invite's rental_id points at it —
+// covers both a genuine re-click and a rental that already existed through
+// some other path (manual entry, a prior run of this same conversion) before
+// this invite row had a chance to record the link itself.
+//
+// rentals has no "paid" column (confirmed against the live schema — the
+// brief's "paid: false" doesn't correspond to a real field) and no NOT NULL
+// constraint beyond renter_id/season_year/start_date/end_date/total_rent/
+// source (confirmed by sampling every existing row for nulls), so this
+// leaves every payment-tracking column unset exactly like a freshly
+// CSV-imported rental with nothing paid yet.
+export async function convertToRental(invite) {
+  const { data: existing, error: existingErr } = await supabase
+    .from('rentals')
+    .select('id')
+    .eq('renter_id', invite.renter_id)
+    .eq('season_year', CONVERT_SEASON_YEAR)
+    .maybeSingle()
+  if (existingErr) throw new Error(existingErr.message)
+
+  let rentalId = existing?.id
+
+  if (!rentalId) {
+    const { data: created, error: insertErr } = await supabase
+      .from('rentals')
+      .insert({
+        renter_id: invite.renter_id,
+        season_year: CONVERT_SEASON_YEAR,
+        start_date: invite.proposed_start,
+        end_date: invite.proposed_end,
+        total_rent: invite.proposed_rent,
+        source: 'season_invite',
+      })
+      .select('id')
+      .single()
+    if (insertErr) throw new Error(insertErr.message)
+    rentalId = created.id
+  }
+
+  if (invite.rental_id !== rentalId) {
+    const { error: linkErr } = await supabase
+      .from('season_invites')
+      .update({ rental_id: rentalId, updated_at: new Date().toISOString() })
+      .eq('id', invite.id)
+    if (linkErr) throw new Error(linkErr.message)
+  }
+
+  return rentalId
 }

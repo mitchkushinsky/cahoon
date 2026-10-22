@@ -1671,7 +1671,7 @@ export default function SettingsScreen({ onClose, onDataRefresh, csvUrl, activeS
             : tab === 'import'
               ? <ImportTab csvUrl={csvUrl} onDataRefresh={() => { onDataRefresh(); handleClose() }} />
               : tab === 'invites'
-                ? <SeasonInvitesTab />
+                ? <SeasonInvitesTab onDataRefresh={onDataRefresh} onCloseSettings={handleClose} />
                 : <PropertyTab activeSeasonYear={activeSeasonYear} onDataRefresh={onDataRefresh} />
           }
         </div>

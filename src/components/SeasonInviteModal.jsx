@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { STATUS_META, STATUS_OPTIONS, fmtMoney, buildInviteEmailPreview, buildHeadsUpEmailPreview } from '../lib/seasonInvites'
+import { STATUS_META, STATUS_OPTIONS, fmtMoney, fmtLongDate, buildInviteEmailPreview, buildHeadsUpEmailPreview, convertToRental } from '../lib/seasonInvites'
 import SeasonInviteEmailModal from './SeasonInviteEmailModal'
 import SeasonInviteHeadsUpModal from './SeasonInviteHeadsUpModal'
 
@@ -12,7 +12,7 @@ const HEADS_UP_STATUSES = ['lease_created', 'lease_sent', 'lease_signed']
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white'
 
-export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }) {
+export default function SeasonInviteModal({ invite, renter, onClose, onUpdated, onDataRefresh, onCloseSettings }) {
   const [proposedStart, setProposedStart] = useState(invite.proposed_start || '')
   const [proposedEnd, setProposedEnd] = useState(invite.proposed_end || '')
   const [proposedRent, setProposedRent] = useState(invite.proposed_rent ?? '')
@@ -24,6 +24,8 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
   const [showHeadsUpPreview, setShowHeadsUpPreview] = useState(false)
   const [generatingLease, setGeneratingLease] = useState(false)
   const [leaseError, setLeaseError] = useState(null)
+  const [converting, setConverting] = useState(false)
+  const [convertError, setConvertError] = useState(null)
 
   // Dates and rent stay editable at every status except "not_returning" —
   // there's no point adjusting a proposed week for a renter who isn't
@@ -106,6 +108,47 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
     } finally {
       setGeneratingLease(false)
     }
+  }
+
+  // Materializes the signed invite as a real rentals row via
+  // convertToRental() (src/lib/seasonInvites.js), which does the actual
+  // writes (rentals insert + season_invites.rental_id link) and is
+  // idempotent on its own — this just confirms with the user first and
+  // syncs the result into local/list state via onUpdated, the same way
+  // every other field here does after persist(). Doesn't go through
+  // persist() itself: convertToRental() already wrote rental_id, so a
+  // second write here would just be a redundant round trip.
+  const handleConvertToRental = async () => {
+    const ok = confirm(
+      `This will create a 2027 rental record for ${renter?.name} with dates ${fmtLongDate(invite.proposed_start)} to ${fmtLongDate(invite.proposed_end)} at ${fmtMoney(invite.proposed_rent)}. Continue?`
+    )
+    if (!ok) return
+    setConverting(true)
+    setConvertError(null)
+    try {
+      const rentalId = await convertToRental(invite)
+      onUpdated({ ...invite, rental_id: rentalId })
+    } catch (err) {
+      setConvertError(err.message || 'Could not convert to rental')
+    } finally {
+      setConverting(false)
+    }
+  }
+
+  // "View 2027 Rental →" — the real rental now lives in App.jsx's `weeks`
+  // state (built from the `rentals` table), not anything this modal already
+  // has in hand, so rather than hand-building a partial stand-in for the
+  // real calendar week (risking a RenterModal that's missing live
+  // appointments/caretaker-note wiring), this refreshes that state and
+  // closes all the way out to the home calendar, where the new rental is
+  // now a real, fully-functional renter chip the normal click path opens
+  // correctly. onDataRefresh/onCloseSettings are threaded down from
+  // App.jsx/SettingsScreen (SettingsScreen's own onClose, not this
+  // modal's — kept as a separate prop name to avoid confusion with this
+  // modal's own onClose, which only closes this detail view).
+  const handleViewRental = async () => {
+    await onDataRefresh?.()
+    onCloseSettings?.()
   }
 
   const preview = buildInviteEmailPreview(invite, renter)
@@ -237,6 +280,7 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
 
           {error && <p className="text-xs text-red-600">{error}</p>}
           {leaseError && <p className="text-xs text-red-600">{leaseError}</p>}
+          {convertError && <p className="text-xs text-red-600">{convertError}</p>}
 
         </div>
 
@@ -264,6 +308,24 @@ export default function SeasonInviteModal({ invite, renter, onClose, onUpdated }
             >
               Preview Lease Heads Up Email
             </button>
+          )}
+          {invite.status === 'lease_signed' && (
+            invite.rental_id ? (
+              <button
+                onClick={handleViewRental}
+                className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                View 2027 Rental →
+              </button>
+            ) : (
+              <button
+                onClick={handleConvertToRental}
+                disabled={converting}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 transition-colors"
+              >
+                {converting ? 'Converting…' : 'Convert to 2027 Rental'}
+              </button>
+            )
           )}
           <button
             onClick={handleMarkSent}

@@ -45,7 +45,7 @@ function InviteRow({ renter, invite, onSelect }) {
   )
 }
 
-export default function SeasonInvitesTab() {
+export default function SeasonInvitesTab({ onDataRefresh, onCloseSettings }) {
   const [rows, setRows] = useState([]) // [{ renter, invite }]
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -258,6 +258,8 @@ export default function SeasonInvitesTab() {
           renter={selected.renter}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}
+          onDataRefresh={onDataRefresh}
+          onCloseSettings={onCloseSettings}
         />
       )}
     </div>

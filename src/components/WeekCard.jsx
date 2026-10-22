@@ -156,6 +156,11 @@ export default function WeekCard({ week, ownerUseRow, appointments, commentOverr
   weekEndExclusive.setDate(weekEndExclusive.getDate() + 7)
   const weekInvites = isAdmin ? seasonInvites.filter(inv => {
     if (inv.status === 'declined' || inv.status === 'not_returning') return false
+    // Converted to a real rental (convertToRental, seasonInvites.js) — that
+    // rental is its own 'renter'-type week below and renders the real green
+    // chip; without this the ghost invite pill would keep stacking on top
+    // of it instead of being replaced.
+    if (inv.rental_id) return false
     if (!inv.proposed_start || !inv.proposed_end) return false
     const invStart = parseDateLocal(inv.proposed_start)
     const invEnd   = parseDateLocal(inv.proposed_end)
