@@ -116,7 +116,15 @@ export default function App() {
             supabase.from('tasks').select('*').not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(20),
             supabase.from('property_settings').select('key, value').in('key', ['owner_lock_code', 'lockbox_code']),
             supabase.from('rentals').select('*, renters(name, email)'),
-            supabase.from('season_invites').select('*, renters(name, email)').eq('season_year', seasonYear + 1),
+            // season_invites.season_year is the proposed rental year itself
+            // (matches proposed_start/proposed_end), not an offset from the
+            // active season — so this needs both the active season's own
+            // invites (the fallback the calendar needs when no `rentals`
+            // rows exist yet for it, e.g. right after a season rollover) and
+            // next season's, which previews as chips past the end of the
+            // active season's own weeks (the original, still-wanted behavior
+            // from before the rollover scenario existed).
+            supabase.from('season_invites').select('*, renters(name, email)').in('season_year', [seasonYear, seasonYear + 1]),
           ])
 
         const parsedWeeks = buildSupabaseCalendar(
