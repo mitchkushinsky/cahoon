@@ -1435,7 +1435,10 @@ function StartSeasonSection({ activeSeasonYear, onDataRefresh }) {
     const ok = confirm(`Switch the app to ${nextYear}? This will update the calendar and all screens to the ${nextYear} season.`)
     if (!ok) return
     setSwitching(true)
-    await supabase.from('property_settings').update({ active_season_year: nextYear })
+    await supabase.from('property_settings').upsert(
+      { key: 'active_season_year', value: String(nextYear), updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    )
     setSwitching(false)
     setJustSwitched(true)
     onDataRefresh()

@@ -92,11 +92,12 @@ export default function App() {
       if (USE_SUPABASE_RENTALS) {
         // Read first — the rentals/invites queries below filter by it, so
         // it has to be known before the rest of the Promise.all fires.
-        const { data: settingsRows } = await supabase
+        const { data: seasonRow } = await supabase
           .from('property_settings')
-          .select('active_season_year')
-          .limit(1)
-        const seasonYear = settingsRows?.[0]?.active_season_year || DEFAULT_SEASON_YEAR
+          .select('value')
+          .eq('key', 'active_season_year')
+          .maybeSingle()
+        const seasonYear = seasonRow?.value ? parseInt(seasonRow.value, 10) : DEFAULT_SEASON_YEAR
         setActiveSeasonYear(seasonYear)
 
         const [rentalsResp, rentersResp, apptResp, ouResp, coResp, cnResp, prResp, rdResp, expResp, taxResp, tasksResp, completedTasksResp, lockCodeResp, allRentalsResp, invitesResp] =
