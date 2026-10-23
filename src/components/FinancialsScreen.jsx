@@ -782,7 +782,7 @@ function OccupancyTaxTab({ weeks, selectedYear, taxPayments, onRefresh }) {
 
 // ─── YearEndReportTab ──────────────────────────────────────────────────────────
 
-function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRentals = [] }) {
+function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRentals = [], paymentRecords = [], activeSeasonYear }) {
   const [view, setView]               = useState('summary') // 'summary' | 'detail'
   const [collapsedCats, setCollapsedCats] = useState(new Set())
 
@@ -792,8 +792,12 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
     return next
   })
 
-  const currentYear = new Date().getFullYear()
-  const isPastYear  = selectedYear < currentYear
+  // `weeks` only ever holds the currently active season's rentals (App.jsx
+  // fetches it filtered by property_settings.active_season_year), so it can
+  // only answer for selectedYear when the two match. Any other selected
+  // year — past or future — has to come from allRentals, which is fetched
+  // unfiltered and covers every season_year.
+  const isPastYear = selectedYear !== activeSeasonYear
 
   const yearRentals = isPastYear
     ? allRentals.filter(r => r.season_year === selectedYear)
@@ -834,6 +838,30 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
         }
       })
 
+  // Payments collected in selectedYear against a rental for the following
+  // season (e.g. a 2027 deposit paid in 2026) — cash-basis taxable income
+  // for selectedYear even though the rental itself belongs to next year, so
+  // it can't come from yearRentals/incomeRows above (those are keyed by the
+  // rental's own season_year). renter_key has no season_year of its own —
+  // it's built the same way payment_records rows were written (see
+  // resolvePayments.js's buildRenterKey): lowercased/trimmed email + the
+  // rental's own start_date string, which for a Supabase rentals row is
+  // already "YYYY-MM-DD", the same shape toISODate produces.
+  const nextYear = selectedYear + 1
+  const nextYearRentals = allRentals.filter(r => r.season_year === nextYear)
+  const futureDeposits = nextYearRentals.flatMap(r => {
+    const email = (r.renters?.email || '').toLowerCase().trim()
+    const key = `${email}_${r.start_date}`
+    return paymentRecords
+      .filter(p => p.renter_key === key && p.date && parseInt(p.date.split('-')[0], 10) === selectedYear)
+      .map(p => ({
+        name:   r.renters?.name || 'Unknown',
+        amount: Number(p.amount || 0),
+        date:   fmtLocalDate(p.date),
+      }))
+  })
+  const futureDepositsTotal = futureDeposits.reduce((s, d) => s + d.amount, 0)
+
   const yearExpenses = expenses.filter(e =>
     e.date ? parseInt(e.date.split('-')[0]) === selectedYear : false
   )
@@ -852,7 +880,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   const sortedCats = Object.entries(expensesByCategory).sort((a, b) => b[1].total - a[1].total)
 
   const revenueContracted  = incomeRows.reduce((s, r) => s + r.totalRent, 0)
-  const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0)
+  const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0) + futureDepositsTotal
   const outstandingBalance = revenueContracted - revenueCollected
 
   const totalTaxCalculated = yearEntries.reduce((s, e) => s + taxForEntry(e), 0)
@@ -876,6 +904,12 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
       for (const r of incomeRows) {
         const dates = `${fmtShort(r.startDate)} - ${fmtShort(r.endDate)}`
         rows.push(row('Renter', r.name, dates, r.totalRent.toFixed(2), r.collected.toFixed(2)))
+      }
+      for (const d of futureDeposits) {
+        rows.push(row(`${nextYear} Deposit`, d.name, fmtShort(d.date), blank(), d.amount.toFixed(2)))
+      }
+      if (futureDeposits.length > 0) {
+        rows.push(row(blank(), `${nextYear} Deposits Total`, blank(), blank(), futureDepositsTotal.toFixed(2)))
       }
       rows.push(row(blank(), 'Revenue Contracted', blank(), blank(), revenueContracted.toFixed(2)))
       rows.push(row(blank(), 'Revenue Collected',  blank(), blank(), revenueCollected.toFixed(2)))
@@ -971,7 +1005,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Rental Income</p>
         </div>
-        {incomeRows.length === 0 ? (
+        {incomeRows.length === 0 && futureDeposits.length === 0 ? (
           <p className="px-4 py-3 text-sm text-gray-400">No rentals for {selectedYear}</p>
         ) : (
           <>
@@ -989,6 +1023,28 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
                 </div>
               </div>
             ))}
+            {futureDeposits.length > 0 && (
+              <div className="border-t border-gray-100">
+                <div className="px-4 py-2 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-500">
+                    {nextYear} Deposits Collected in {selectedYear}
+                  </p>
+                </div>
+                {view === 'detail' && futureDeposits.map((d, i) => (
+                  <div key={i} className="px-4 py-2.5 border-b border-gray-50 last:border-b-0 flex justify-between items-baseline">
+                    <p className="text-sm text-gray-800">{d.name}</p>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">{fmt(d.amount)}</p>
+                      <p className="text-xs text-gray-400">{fmtShort(d.date)}</p>
+                    </div>
+                  </div>
+                ))}
+                <div className="px-4 py-2.5 flex justify-between items-baseline">
+                  <span className="text-sm text-gray-600">{nextYear} Deposits Total</span>
+                  <span className="text-sm font-medium text-gray-900">{fmt(futureDepositsTotal)}</span>
+                </div>
+              </div>
+            )}
             {incomeTotals}
           </>
         )}
@@ -1079,7 +1135,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
 
 // ─── FinancialsScreen ──────────────────────────────────────────────────────────
 
-export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments, allRentals = [], onRefreshFinancials }) {
+export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments, allRentals = [], paymentRecords = [], activeSeasonYear, onRefreshFinancials }) {
   const [visible, setVisible] = useState(false)
   const [activeTab, setActiveTab] = useState('expenses')
 
@@ -1187,6 +1243,8 @@ export default function FinancialsScreen({ onClose, weeks, expenses, taxPayments
               selectedYear={selectedYear}
               taxPayments={taxPayments}
               allRentals={allRentals}
+              paymentRecords={paymentRecords}
+              activeSeasonYear={activeSeasonYear}
             />
           )}
         </div>

@@ -565,6 +565,8 @@ export default function App() {
           expenses={expenses}
           taxPayments={taxPayments}
           allRentals={allRentals}
+          paymentRecords={paymentRecords}
+          activeSeasonYear={activeSeasonYear}
           onRefreshFinancials={refreshFinancials}
         />
       )}
