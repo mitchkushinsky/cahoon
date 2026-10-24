@@ -821,21 +821,42 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   // A payment only counts toward selectedYear's collected total if it was
   // actually received that calendar year — a rental's own season_year
   // doesn't tell you when its payments landed (see Brett Capshaw: a 2026
-  // rental fully paid in 2025). Each payment carries its own date column
-  // on the rentals row, so filter per-payment rather than trusting the
-  // rental's season_year the way the old sum did.
+  // rental fully paid in 2025). The rentals row's payment1/2/3_amount +
+  // _date columns are an incomplete, point-in-time snapshot (e.g. payment 3
+  // is routinely missing there once it's recorded after the fact via
+  // AddPaymentDrawer) — payment_records is the live, complete source, so
+  // sum from there instead, joined by the same renter_key shape used below
+  // for futureDeposits (lowercased/trimmed email + the rental's start_date
+  // string, which for a Supabase rentals row is already "YYYY-MM-DD").
+  //
+  // payment_records only goes back to when that table started being
+  // seeded — older seasons (2025 and earlier, confirmed empty there) were
+  // never migrated into it, so a renter with zero rows there at all isn't
+  // "paid nothing," it's "untracked in this table." For those, fall back
+  // to the same date-filtered rentals-column sum used before this table
+  // join existed, rather than silently reporting $0 collected.
   const paidInYear = (dateStr, year) => dateStr && parseInt(dateStr.split('-')[0], 10) === year
 
   const incomeRows = isPastYear
-    ? yearRentals.map(r => ({
-        name:      r.renters?.name || 'Unknown',
-        startDate: fmtLocalDate(r.start_date),
-        endDate:   fmtLocalDate(r.end_date),
-        totalRent: Number(r.total_rent || 0),
-        collected: (paidInYear(r.payment1_date, selectedYear) ? Number(r.payment1_amount || 0) : 0)
-                 + (paidInYear(r.payment2_date, selectedYear) ? Number(r.payment2_amount || 0) : 0)
-                 + (paidInYear(r.payment3_date, selectedYear) ? Number(r.payment3_amount || 0) : 0),
-      }))
+    ? yearRentals.map(r => {
+        const email = (r.renters?.email || '').toLowerCase().trim()
+        const key = `${email}_${r.start_date}`
+        const records = paymentRecords.filter(p => p.renter_key === key)
+        const collected = records.length > 0
+          ? records
+              .filter(p => p.date && parseInt(p.date.split('-')[0], 10) === selectedYear)
+              .reduce((s, p) => s + Number(p.amount || 0), 0)
+          : (paidInYear(r.payment1_date, selectedYear) ? Number(r.payment1_amount || 0) : 0)
+          + (paidInYear(r.payment2_date, selectedYear) ? Number(r.payment2_amount || 0) : 0)
+          + (paidInYear(r.payment3_date, selectedYear) ? Number(r.payment3_amount || 0) : 0)
+        return {
+          name:      r.renters?.name || 'Unknown',
+          startDate: fmtLocalDate(r.start_date),
+          endDate:   fmtLocalDate(r.end_date),
+          totalRent: Number(r.total_rent || 0),
+          collected,
+        }
+      })
     : yearEntries.map(e => {
         const start = e.renterInfo?.dates?.start
         const end   = e.renterInfo?.dates?.end
