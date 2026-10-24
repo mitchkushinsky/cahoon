@@ -818,13 +818,23 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   }
   const fmtShort = d => d?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || ''
 
+  // A payment only counts toward selectedYear's collected total if it was
+  // actually received that calendar year — a rental's own season_year
+  // doesn't tell you when its payments landed (see Brett Capshaw: a 2026
+  // rental fully paid in 2025). Each payment carries its own date column
+  // on the rentals row, so filter per-payment rather than trusting the
+  // rental's season_year the way the old sum did.
+  const paidInYear = (dateStr, year) => dateStr && parseInt(dateStr.split('-')[0], 10) === year
+
   const incomeRows = isPastYear
     ? yearRentals.map(r => ({
         name:      r.renters?.name || 'Unknown',
         startDate: fmtLocalDate(r.start_date),
         endDate:   fmtLocalDate(r.end_date),
         totalRent: Number(r.total_rent || 0),
-        collected: Number(r.payment1_amount || 0) + Number(r.payment2_amount || 0) + Number(r.payment3_amount || 0),
+        collected: (paidInYear(r.payment1_date, selectedYear) ? Number(r.payment1_amount || 0) : 0)
+                 + (paidInYear(r.payment2_date, selectedYear) ? Number(r.payment2_amount || 0) : 0)
+                 + (paidInYear(r.payment3_date, selectedYear) ? Number(r.payment3_amount || 0) : 0),
       }))
     : yearEntries.map(e => {
         const start = e.renterInfo?.dates?.start
@@ -880,8 +890,13 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   const sortedCats = Object.entries(expensesByCategory).sort((a, b) => b[1].total - a[1].total)
 
   const revenueContracted  = incomeRows.reduce((s, r) => s + r.totalRent, 0)
-  const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0) + futureDepositsTotal
+  const revenueCollected   = incomeRows.reduce((s, r) => s + r.collected, 0)
   const outstandingBalance = revenueContracted - revenueCollected
+  // Cash-basis taxable income for selectedYear: this year's own collected
+  // rent plus any next-year deposits that landed this year — the figure
+  // that actually matters for tax reporting, as opposed to Revenue
+  // Collected (which is scoped to this year's own rentals only).
+  const totalTaxableIncome = revenueCollected + futureDepositsTotal
 
   const totalTaxCalculated = yearEntries.reduce((s, e) => s + taxForEntry(e), 0)
   const totalTaxPaid = taxPayments
@@ -890,7 +905,7 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
   const totalTax  = isPastYear ? totalTaxPaid : totalTaxCalculated
 
   const totalExpenses = yearExpenses.reduce((s, e) => s + Number(e.amount || 0), 0)
-  const netIncome     = revenueCollected - totalTax - totalExpenses
+  const netIncome     = totalTaxableIncome - totalTax - totalExpenses
 
   function exportCSV() {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
@@ -913,7 +928,10 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
       }
       rows.push(row(blank(), 'Revenue Contracted', blank(), blank(), revenueContracted.toFixed(2)))
       rows.push(row(blank(), 'Revenue Collected',  blank(), blank(), revenueCollected.toFixed(2)))
-      rows.push(row(blank(), 'Outstanding Balance', blank(), blank(), outstandingBalance.toFixed(2)))
+      rows.push(row(blank(), 'Total Taxable Income', blank(), blank(), totalTaxableIncome.toFixed(2)))
+      if (!isPastYear) {
+        rows.push(row(blank(), 'Outstanding Balance', blank(), blank(), outstandingBalance.toFixed(2)))
+      }
       rows.push('')
 
       rows.push(row('OCCUPANCY TAX'))
@@ -938,7 +956,10 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
       rows.push(row('Type', 'Description', 'Amount'))
       rows.push(row('Income', 'Revenue Contracted', revenueContracted.toFixed(2)))
       rows.push(row('Income', 'Revenue Collected',  revenueCollected.toFixed(2)))
-      rows.push(row('Income', 'Outstanding Balance', outstandingBalance.toFixed(2)))
+      rows.push(row('Income', 'Total Taxable Income', totalTaxableIncome.toFixed(2)))
+      if (!isPastYear) {
+        rows.push(row('Income', 'Outstanding Balance', outstandingBalance.toFixed(2)))
+      }
       rows.push(row('Tax', 'Occupancy Tax', (-totalTax).toFixed(2)))
       for (const [cat, { total }] of sortedCats) {
         rows.push(row('Expense', cat, (-total).toFixed(2)))
@@ -967,7 +988,11 @@ function YearEndReportTab({ weeks, expenses, selectedYear, taxPayments, allRenta
         <span className="text-sm text-gray-600">Revenue Collected</span>
         <span className="text-sm font-medium text-gray-900">{fmt(revenueCollected)}</span>
       </div>
-      {outstandingBalance > 0.01 && (
+      <div className="px-4 py-2.5 flex justify-between items-baseline">
+        <span className="text-sm font-semibold text-gray-700">Total Taxable Income</span>
+        <span className="text-sm font-bold text-gray-900">{fmt(totalTaxableIncome)}</span>
+      </div>
+      {!isPastYear && outstandingBalance > 0.01 && (
         <div className="px-4 py-2.5 flex justify-between items-baseline">
           <span className="text-sm text-red-600">Outstanding Balance</span>
           <span className="text-sm font-medium text-red-600">{fmt(outstandingBalance)}</span>
